@@ -49,8 +49,8 @@ const goAfterLogin = () => {
   router.replace(redirect)
 }
 
-// Демо-аккаунты из db/05_demo.sql — кнопки видны только в dev-режиме
-const isDev = import.meta.env.DEV
+// Демо-аккаунты из db/05_demo.sql: в dev-режиме всегда, в сборке — если VITE_DEMO_LOGIN=true
+const isDev = import.meta.env.DEV || import.meta.env.VITE_DEMO_LOGIN === 'true'
 const demoAccounts = [
   { role: UserRole.Student, email: 'demo.student@example.com' },
   { role: UserRole.Teacher, email: 'demo.teacher@example.com' },

@@ -13,6 +13,17 @@ export interface ReleaseNote {
 
 export const changelog: ReleaseNote[] = [
     {
+        version: '1.0.1',
+        date: '2026-10-02',
+        highlights: [
+            'Демо-вход в приложении'
+        ],
+        features: [
+            'На экране входа — кнопки «Ученик / Учитель / Родитель» для быстрого входа в демо-аккаунты.'
+        ],
+        fixes: []
+    },
+    {
         version: '1.0.0',
         date: '2026-10-02',
         highlights: [

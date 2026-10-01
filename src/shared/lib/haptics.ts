@@ -1,25 +1,33 @@
+import { Capacitor } from '@capacitor/core'
+import { Haptics, ImpactStyle, NotificationType } from '@capacitor/haptics'
+
 /**
- * Тактильный отклик через Vibration API.
- * Браузеры без поддержки (iOS Safari, десктоп) просто игнорируют вызовы.
+ * Тактильный отклик: в Android-приложении — Capacitor Haptics (как в fair price),
+ * в браузере — Vibration API. Неподдерживаемые платформы молча игнорируются.
  */
 const vibrate = (pattern: number | number[]) => {
   if (typeof navigator === 'undefined' || typeof navigator.vibrate !== 'function') return
   try {
     navigator.vibrate(pattern)
   } catch {
-    // Игнорируем ошибки неподдерживаемых платформ
+    // ignore
   }
+}
+
+const native = (fn: () => Promise<void>, fallback: number | number[]) => {
+  if (Capacitor.isNativePlatform()) fn().catch(() => undefined)
+  else vibrate(fallback)
 }
 
 export const LxHaptics = {
   /** Микро-взаимодействия: табы, выбор пункта. */
-  light: () => vibrate(8),
+  light: () => native(() => Haptics.impact({ style: ImpactStyle.Light }), 8),
   /** Значимое действие: открыть ответ, добавить слово. */
-  medium: () => vibrate(16),
+  medium: () => native(() => Haptics.impact({ style: ImpactStyle.Medium }), 16),
   /** «Знаю», сохранение. */
-  success: () => vibrate([10, 40, 10]),
+  success: () => native(() => Haptics.notification({ type: NotificationType.Success }), [10, 40, 10]),
   /** Подтверждение удаления. */
-  warning: () => vibrate([20, 60, 20]),
+  warning: () => native(() => Haptics.notification({ type: NotificationType.Warning }), [20, 60, 20]),
   /** «Не знаю», ошибка сохранения. */
-  error: () => vibrate([30, 50, 30]),
+  error: () => native(() => Haptics.notification({ type: NotificationType.Error }), [30, 50, 30]),
 }

@@ -9,6 +9,7 @@ import { assignmentRoutes } from '@/modules/assignments'
 import { teacherRoutes } from '@/modules/teachers'
 import { languageRoutes } from '@/modules/languages'
 import { settingsRoutes } from '@/modules/settings'
+import { updateRoutes } from '@/modules/updates'
 import { useAuthStore } from '@/modules/auth/state/useAuthStore'
 import { HOME_BY_ROLE } from '@/app/navigation'
 
@@ -27,6 +28,7 @@ const router = createRouter({
         ...teacherRoutes,
         ...languageRoutes,
         ...settingsRoutes,
+        ...updateRoutes,
         { path: '/:pathMatch(.*)*', redirect: '/' },
     ],
     scrollBehavior: () => ({ top: 0 }),

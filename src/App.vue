@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue'
-import { useRoute } from 'vue-router'
+import { useRoute, useRouter } from 'vue-router'
 import { useTheme } from '@/shared/composables/useTheme'
 import { useNotify } from '@/shared/composables/useNotify'
 import MainLayout from '@/app/layouts/MainLayout.vue'
@@ -9,10 +9,15 @@ import { useAuthStore } from '@/modules/auth/state/useAuthStore'
 import { useStudyStore } from '@/modules/training/state/useStudyStore'
 import { useWordSetsStore } from '@/modules/word-sets/state/useWordSetsStore'
 import { useLanguagesStore } from '@/modules/languages/state/useLanguagesStore'
+import { useUpdateStore } from '@/modules/updates/state/useUpdateStore'
+import UpdateBanner from '@/modules/updates/ui/UpdateBanner.vue'
+import { DeviceService } from '@/app/services/DeviceService'
 
 const { initTheme } = useTheme()
 const { notify } = useNotify()
 const route = useRoute()
+const router = useRouter()
+const updates = useUpdateStore()
 const auth = useAuthStore()
 const study = useStudyStore()
 
@@ -45,6 +50,12 @@ watch(
 
 onMounted(() => {
   initTheme()
+  DeviceService.initBackButton(router)
+  DeviceService.onResume(() => {
+    updates.checkIfStale()
+    if (navigator.onLine) syncAnswers()
+  })
+  updates.check()
   useLanguagesStore().load().catch(e => console.error('Languages load failed:', e))
   window.addEventListener('online', onOnline)
   window.addEventListener('offline', onOffline)
@@ -60,6 +71,7 @@ onBeforeUnmount(() => {
   <router-view v-if="layout === 'blank'" />
   <MainLayout v-else :focus="layout === 'focus'" />
   <LxNotificationContainer />
+  <UpdateBanner v-if="layout !== 'focus'" />
 
   <Transition name="fade">
     <button v-if="!isOnline || study.pendingCount > 0" class="offline-banner" :disabled="!isOnline" @click="syncAnswers">

@@ -46,4 +46,32 @@ npm run build      # проверка типов + сборка PWA
 
 Ученик без учителя может сразу добавить стартовый набор на главном экране.
 
+## Android (APK с самообновлением — как в fair price)
+
+Требуется Android Studio (JDK берётся из её `jbr`, путь в `android/gradle.properties`) и Android SDK
+(`android/local.properties`, файл не коммитится).
+
+Для выгрузки релиза добавьте в `.env.local` ключ **service_role** (Supabase → Project Settings → API Keys):
+
+```env
+SUPABASE_SERVICE_ROLE_KEY=eyJ...
+```
+
+### Выпуск новой версии
+
+1. Поднимите версию: `npm version patch --no-git-tag-version` (или `minor` / `major`).
+2. Добавьте запись в `src/modules/updates/changelog.ts` — из неё берётся текст «Что нового».
+3. `npm run release`, команда делает всё по шагам:
+   - `build` → `cap sync android` → `sync-android-version` (versionCode = 1.2.3 → 10203)
+   - `build-debug-apk` (`android/app/build/outputs/apk/debug/app-debug.apk`)
+   - `upload-release` → bucket `releases`: `lexi-<версия>.apk`, `app-latest.apk`, затем `version.json`
+
+Приложение при запуске и при возврате на экран читает `version.json`. Если версия новее —
+показывает баннер «Доступно обновление» и кнопку «Обновить» в профиле: APK скачивается в
+браузере, Android предлагает установить его поверх.
+
+Другие команды: `npm run update-android` (только синхронизировать проект), `npm run get-android-version`,
+`npm run android:icons` (перегенерировать иконки и сплэш из `public/icon.svg`).
+Первую установку делайте из `app-latest.apk`; установка из «неизвестных источников» должна быть разрешена.
+
 Архитектура и соглашения: [docs/architecture.md](docs/architecture.md).

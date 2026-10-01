@@ -1,4 +1,5 @@
 import { ref } from 'vue'
+import { DeviceService } from '@/app/services/DeviceService'
 
 const STORAGE_KEY = 'lx_theme'
 const isDark = ref(false)
@@ -21,6 +22,7 @@ export function useTheme() {
         }
         const meta = document.querySelector('meta[name="theme-color"]')
         meta?.setAttribute('content', isDark.value ? '#12161C' : '#0F8B77')
+        void DeviceService.updateStatusBarStyle(isDark.value)
     }
 
     const toggleTheme = () => {

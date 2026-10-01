@@ -9,6 +9,8 @@ export default defineConfig({
     vue(),
     VitePWA({
       registerType: 'autoUpdate',
+      // регистрируем вручную в main.ts и только в браузере: внутри APK SW отдавал бы старые файлы после обновления
+      injectRegister: null,
       includeAssets: ['icon.svg'],
       manifest: {
         name: 'Lexi — изучаем слова',

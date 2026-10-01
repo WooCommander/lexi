@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { computed, onMounted, ref, watch } from 'vue'
 import { useRouter } from 'vue-router'
-import { KeyRound, LogOut, Moon, Sun } from 'lucide-vue-next'
+import { ChevronRight, KeyRound, LogOut, Moon, RefreshCw, Sun } from 'lucide-vue-next'
 import { LxButton, LxCard, LxCheckbox, LxInput, LxPageHeader, LxSegmented, LxSelect } from '@/design-system'
 import { useAuthStore } from '@/modules/auth/state/useAuthStore'
 import { ALL_ROLES, ROLE_LABELS, UserRole } from '@/modules/auth/domain/User'
@@ -11,6 +11,7 @@ import { useLanguagesStore } from '@/modules/languages/state/useLanguagesStore'
 import { useStudyStore } from '@/modules/training/state/useStudyStore'
 import { SESSION_SIZES } from '@/modules/training/domain/Training'
 import { useTheme } from '@/shared/composables/useTheme'
+import { useUpdateStore } from '@/modules/updates/state/useUpdateStore'
 import { useNotify } from '@/shared/composables/useNotify'
 import { errorMessage } from '@/shared/lib/errors'
 
@@ -20,6 +21,7 @@ const store = useSettingsStore()
 const languages = useLanguagesStore()
 const study = useStudyStore()
 const { isDark, toggleTheme } = useTheme()
+const updates = useUpdateStore()
 const { notify } = useNotify()
 
 const name = ref(auth.displayName)
@@ -129,6 +131,29 @@ const logout = async () => {
       <LxButton variant="secondary" @click="router.push('/join')">Ввести код</LxButton>
     </LxCard>
 
+    <LxCard class="stack version" :class="{ 'has-update': updates.available }">
+      <div class="row">
+        <div class="spacer">
+          <b>Версия приложения</b>
+          <p class="caption">
+            v{{ updates.currentVersion }} ·
+            <template v-if="!updates.isSupported">веб-версия обновляется автоматически</template>
+            <template v-else-if="updates.available">доступна v{{ updates.available.version }}</template>
+            <template v-else>актуальная версия</template>
+          </p>
+        </div>
+        <LxButton v-if="updates.available" size="sm" @click="updates.install()">Обновить</LxButton>
+        <LxButton v-else-if="updates.isSupported" size="sm" variant="secondary" :loading="updates.isChecking"
+          @click="updates.check()">
+          <RefreshCw :size="18" /> Проверить
+        </LxButton>
+      </div>
+      <p v-if="updates.available?.notes" class="version__notes">{{ updates.available.notes }}</p>
+      <LxButton variant="ghost" block @click="router.push('/changelog')">
+        Что нового <ChevronRight :size="18" />
+      </LxButton>
+    </LxCard>
+
     <div class="row">
       <LxButton variant="secondary" block @click="toggleTheme">
         <Sun v-if="isDark" :size="20" /><Moon v-else :size="20" />
@@ -156,6 +181,18 @@ const logout = async () => {
   align-items: center;
   gap: var(--space-3);
   font-weight: 700;
+}
+
+.version {
+  &.has-update {
+    border-color: var(--color-primary);
+  }
+
+  &__notes {
+    white-space: pre-line;
+    font-size: var(--text-small);
+    color: var(--color-text-secondary);
+  }
 }
 
 .join {

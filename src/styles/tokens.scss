@@ -1,0 +1,134 @@
+// =====================================================================
+//  Lexi design tokens — «бумага и чернила»: тёплый фон, бирюзовый бренд,
+//  солнечный акцент. Крупная типографика, мягкие большие радиусы.
+// =====================================================================
+
+// --- Colors (Light) ---
+$color-primary: #0F8B77;            // Teal
+$color-primary-strong: #0B6E5E;
+$color-on-primary: #ffffff;
+$color-accent: #FFC53D;             // Sunflower
+$color-on-accent: #3A2A00;
+
+$color-background: #F6F4EF;         // Warm paper
+$color-surface: #FFFFFF;
+$color-surface-2: #EFEBE3;
+$color-surface-translucent: rgba(255, 255, 255, 0.82);
+
+$color-success: #1F9D63;
+$color-error: #E5484D;
+$color-warning: #E89B0C;
+$color-info: #3A6FE0;
+
+$color-text-primary: #1F2430;
+$color-text-secondary: #5D6473;
+$color-text-tertiary: #8A909C;
+$color-border: #E6E0D4;
+
+// --- Colors (Dark) ---
+$dark-color-primary: #2BB39A;
+$dark-color-primary-strong: #47C7AF;
+$dark-color-on-primary: #06231D;
+$dark-color-accent: #FFCF5C;
+
+$dark-color-background: #12161C;
+$dark-color-surface: #1B2129;
+$dark-color-surface-2: #232A33;
+$dark-color-surface-translucent: rgba(27, 33, 41, 0.86);
+
+$dark-color-text-primary: #EEF1F5;
+$dark-color-text-secondary: #A3ACB9;
+$dark-color-text-tertiary: #737D8B;
+$dark-color-border: #2C3440;
+
+// --- Typography ---
+$font-family: 'Nunito', system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;
+
+// --- Radii ---
+$radius-sm: 10px;
+$radius-md: 14px;
+$radius-lg: 22px;
+$radius-xl: 28px;
+$radius-pill: 999px;
+
+:root {
+  --color-primary: #{$color-primary};
+  --color-primary-strong: #{$color-primary-strong};
+  --color-primary-soft: color-mix(in srgb, #{$color-primary} 12%, transparent);
+  --color-on-primary: #{$color-on-primary};
+  --color-accent: #{$color-accent};
+  --color-on-accent: #{$color-on-accent};
+
+  --color-background: #{$color-background};
+  --color-surface: #{$color-surface};
+  --color-surface-2: #{$color-surface-2};
+  --color-surface-translucent: #{$color-surface-translucent};
+
+  --color-success: #{$color-success};
+  --color-success-soft: color-mix(in srgb, #{$color-success} 14%, transparent);
+  --color-error: #{$color-error};
+  --color-error-soft: color-mix(in srgb, #{$color-error} 12%, transparent);
+  --color-warning: #{$color-warning};
+  --color-warning-soft: color-mix(in srgb, #{$color-warning} 16%, transparent);
+  --color-info: #{$color-info};
+
+  --color-text-primary: #{$color-text-primary};
+  --color-text-secondary: #{$color-text-secondary};
+  --color-text-tertiary: #{$color-text-tertiary};
+  --color-border: #{$color-border};
+
+  --font-family: #{$font-family};
+
+  --text-display: 2.75rem;  // слово на карточке
+  --text-h1: 2rem;
+  --text-h2: 1.5rem;
+  --text-h3: 1.25rem;
+  --text-body: 1.0625rem;
+  --text-small: 0.9375rem;
+  --text-caption: 0.8125rem;
+
+  --space-1: 4px;
+  --space-2: 8px;
+  --space-3: 12px;
+  --space-4: 16px;
+  --space-5: 24px;
+  --space-6: 32px;
+  --space-7: 48px;
+
+  --radius-sm: #{$radius-sm};
+  --radius-md: #{$radius-md};
+  --radius-lg: #{$radius-lg};
+  --radius-xl: #{$radius-xl};
+  --radius-pill: #{$radius-pill};
+
+  --shadow-1: 0 1px 2px rgba(60, 45, 20, 0.06), 0 2px 8px rgba(60, 45, 20, 0.04);
+  --shadow-2: 0 6px 24px -6px rgba(60, 45, 20, 0.16);
+  --shadow-3: 0 18px 48px -12px rgba(60, 45, 20, 0.28);
+
+  --tap-size: 48px;             // минимум 44×44 по ТЗ
+  --layout-max-width: 1080px;
+  --sidebar-width: 248px;
+  --bottom-nav-height: 68px;
+}
+
+body.dark-theme {
+  --color-primary: #{$dark-color-primary};
+  --color-primary-strong: #{$dark-color-primary-strong};
+  --color-primary-soft: color-mix(in srgb, #{$dark-color-primary} 16%, transparent);
+  --color-on-primary: #{$dark-color-on-primary};
+  --color-accent: #{$dark-color-accent};
+
+  --color-background: #{$dark-color-background};
+  --color-surface: #{$dark-color-surface};
+  --color-surface-2: #{$dark-color-surface-2};
+  --color-surface-translucent: #{$dark-color-surface-translucent};
+
+  --color-text-primary: #{$dark-color-text-primary};
+  --color-text-secondary: #{$dark-color-text-secondary};
+  --color-text-tertiary: #{$dark-color-text-tertiary};
+  --color-border: #{$dark-color-border};
+
+  --shadow-1: 0 1px 2px rgba(0, 0, 0, 0.3);
+  --shadow-2: 0 6px 24px -6px rgba(0, 0, 0, 0.5);
+  --shadow-3: 0 18px 48px -12px rgba(0, 0, 0, 0.6);
+}

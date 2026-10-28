@@ -1,18 +1,12 @@
 <script setup lang="ts">
-import { computed, onMounted, ref } from 'vue'
+import { computed, onMounted } from 'vue'
 import { useRouter } from 'vue-router'
-import { BookOpenCheck, Flame, KeyRound, Sparkles } from 'lucide-vue-next'
+import { BookOpenCheck, Flame, KeyRound, PackagePlus, Sparkles } from 'lucide-vue-next'
 import { LxButton, LxCard, LxEmptyState, LxPageHeader, LxProgressBar, LxSpinner } from '@/design-system'
 import { useStudyStore } from '../state/useStudyStore'
 import { useSettingsStore } from '@/modules/settings/state/useSettingsStore'
 import { useLanguagesStore } from '@/modules/languages/state/useLanguagesStore'
 import { useAuthStore } from '@/modules/auth/state/useAuthStore'
-import { useWordSetsStore } from '@/modules/word-sets/state/useWordSetsStore'
-import { WordSetService } from '@/modules/word-sets/services/WordSetService'
-import { WordSource } from '@/modules/word-sets/domain/WordSet'
-import { STARTER_SETS, type StarterSet } from '@/modules/vocabulary/lib/starterSets'
-import { useNotify } from '@/shared/composables/useNotify'
-import { errorMessage } from '@/shared/lib/errors'
 import { wordsLabel } from '@/shared/lib/plural'
 
 const router = useRouter()
@@ -20,9 +14,6 @@ const study = useStudyStore()
 const settings = useSettingsStore()
 const languages = useLanguagesStore()
 const auth = useAuthStore()
-const { notify } = useNotify()
-
-const creatingStarter = ref<string | null>(null)
 
 const goal = computed(() => settings.goalFor())
 const goalDone = computed(() => study.todayCount >= goal.value)
@@ -32,41 +23,19 @@ const greeting = computed(() => {
   return `${part}, ${auth.displayName}!`
 })
 
-const availableStarters = computed(() =>
-  STARTER_SETS.filter(s => languages.byCode.has(s.sourceCode) && languages.byCode.has(s.targetCode)),
-)
-
 onMounted(async () => {
   await languages.load()
   await study.load()
 })
-
-const addStarter = async (starter: StarterSet) => {
-  const source = languages.byCode.get(starter.sourceCode)
-  const target = languages.byCode.get(starter.targetCode)
-  if (!source || !target) return
-  creatingStarter.value = starter.name
-  try {
-    const set = await useWordSetsStore().create({
-      name: starter.name,
-      sourceLanguageId: source.id,
-      targetLanguageId: target.id,
-      source: WordSource.Personal,
-    })
-    await WordSetService.addWords(set, starter.words, 0)
-    await study.load(true)
-    notify(`Набор «${starter.name}» добавлен`, 'success')
-  } catch (e) {
-    notify(errorMessage(e, 'Не удалось добавить набор'), 'error')
-  } finally {
-    creatingStarter.value = null
-  }
-}
 </script>
 
 <template>
   <div class="page">
-    <LxPageHeader :title="greeting" subtitle="Выберите язык, чтобы начать" />
+    <LxPageHeader :title="greeting" subtitle="Выберите язык, чтобы начать">
+      <template #actions>
+        <LxButton variant="secondary" @click="router.push('/catalog')"><PackagePlus :size="20" /> Готовые наборы</LxButton>
+      </template>
+    </LxPageHeader>
 
     <LxCard v-if="study.languageSummaries.length" tone="accent" class="goal">
       <div class="goal__icon">
@@ -112,31 +81,13 @@ const addStarter = async (starter: StarterSet) => {
 
     <template v-else>
       <LxEmptyState title="Пока нет слов"
-        description="Подключитесь к учителю по коду или начните со стартового набора.">
+        description="Возьмите готовый набор по теме или подключитесь к учителю по коду.">
         <template #icon><BookOpenCheck :size="36" /></template>
-        <LxButton @click="router.push('/join')">
+        <LxButton @click="router.push('/catalog')"><PackagePlus :size="20" /> Готовые наборы</LxButton>
+        <LxButton variant="secondary" @click="router.push('/join')">
           <KeyRound :size="20" /> Ввести код учителя
         </LxButton>
       </LxEmptyState>
-
-      <section v-if="availableStarters.length" class="section">
-        <h2 class="section-title">Стартовые наборы</h2>
-        <div class="grid-cards">
-          <LxCard v-for="s in availableStarters" :key="s.name" class="starter">
-            <div class="lang-card__head">
-              <span class="lang-card__flag">{{ languages.byCode.get(s.sourceCode)?.flag }}</span>
-              <div>
-                <div class="lang-card__name">{{ s.name }}</div>
-                <div class="caption">{{ wordsLabel(s.words.length) }}</div>
-              </div>
-            </div>
-            <LxButton variant="secondary" block :loading="creatingStarter === s.name" :disabled="!!creatingStarter"
-              @click="addStarter(s)">
-              Добавить
-            </LxButton>
-          </LxCard>
-        </div>
-      </section>
     </template>
   </div>
 </template>
@@ -250,15 +201,5 @@ const addStarter = async (starter: StarterSet) => {
   &--new b { color: var(--color-info); }
   &--due b { color: var(--color-primary); }
   &--hard b { color: var(--color-error); }
-}
-
-.starter {
-  display: flex;
-  flex-direction: column;
-  gap: var(--space-4);
-
-  :deep(button) {
-    margin-top: auto;
-  }
 }
 </style>

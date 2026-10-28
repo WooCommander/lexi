@@ -1,94 +1,56 @@
 import type { VocabularyItemInput } from '../domain/VocabularyItem'
+import { TOPICS, parseTopicLines, type GradeBand, type TopicId, type TopicWords } from './catalog/topics'
+import { EN_WORDS } from './catalog/en'
+import { RO_WORDS } from './catalog/ro'
+import { UK_WORDS } from './catalog/uk'
+import { ukrainianReading } from './catalog/ukReading'
 
-/** Стартовые наборы для ученика без учителя: язык задаётся кодами, а не полями. */
+/**
+ * Готовые наборы: язык × тема. Язык задаётся кодами, а не полями — каталог не привязан к английскому.
+ * Все наборы идут «изучаемый язык → русский».
+ */
 export interface StarterSet {
+    id: string
     sourceCode: string
     targetCode: string
     name: string
+    topicId: TopicId
+    topicTitle: string
+    grades: GradeBand
     words: VocabularyItemInput[]
 }
 
-const w = (sourceText: string, targetText: string, sourceTranscription?: string, exampleSource?: string, exampleTarget?: string): VocabularyItemInput => ({
-    sourceText,
-    targetText,
-    sourceTranscription,
-    exampleSource,
-    exampleTarget,
-})
-
-/** Как читается слово русскими буквами — по исходному слову. Приблизительно, для первых шагов. */
-const READINGS: Record<string, string> = {
-    // English
-    apple: 'эпл', dog: 'дог', cat: 'кэт', house: 'хаус', school: 'скул', book: 'бук', friend: 'фрэнд',
-    family: 'фэмили', water: 'уотэ', beautiful: 'бьютифул', because: 'бикоз', through: 'сру', thought: 'сот',
-    teacher: 'тичэ', window: 'уиндоу',
-    // Română
-    măr: 'мэр', câine: 'кынэ', pisică: 'писикэ', casă: 'каса', școală: 'шкоалэ', carte: 'карте',
-    prieten: 'приетен', familie: 'фамилие', mamă: 'мамэ', tată: 'тата', mulțumesc: 'мулцумеск', învățător: 'ынвэцэтор',
+export interface CatalogLanguage {
+    code: string
+    /** Название на самом языке — по нему узнаёт его ученик и так называются наборы. */
+    title: string
+    words: TopicWords
+    /**
+     * Своё правило чтения вместо поля из словаря. Нужно, когда оно механическое (украинский):
+     * так чтение одинаково у всех слов, а не зависит от того, не забыл ли его автор.
+     */
+    reading?: (word: string) => string | undefined
 }
 
-const withReadings = (words: VocabularyItemInput[]): VocabularyItemInput[] =>
-    words.map(word => ({ ...word, sourceReading: READINGS[word.sourceText] }))
-
-export const STARTER_SETS: StarterSet[] = [
-    {
-        sourceCode: 'en',
-        targetCode: 'ru',
-        name: 'English — Первые слова',
-        words: withReadings([
-            w('apple', 'яблоко', '/ˈæp.əl/', 'I eat an apple.', 'Я ем яблоко.'),
-            w('dog', 'собака', '/dɒɡ/', 'My dog is funny.', 'Моя собака смешная.'),
-            w('cat', 'кошка', '/kæt/'),
-            w('house', 'дом', '/haʊs/'),
-            w('school', 'школа', '/skuːl/', 'I go to school.', 'Я хожу в школу.'),
-            w('book', 'книга', '/bʊk/'),
-            w('friend', 'друг', '/frend/'),
-            w('family', 'семья', '/ˈfæm.əl.i/'),
-            w('water', 'вода', '/ˈwɔː.tər/'),
-            w('beautiful', 'красивый', '/ˈbjuː.tɪ.fəl/', 'It is a beautiful day.', 'Сегодня прекрасный день.'),
-            w('because', 'потому что', '/bɪˈkɒz/'),
-            w('through', 'через', '/θruː/'),
-            w('thought', 'мысль', '/θɔːt/'),
-            w('teacher', 'учитель', '/ˈtiː.tʃər/'),
-            w('window', 'окно', '/ˈwɪn.dəʊ/'),
-        ]),
-    },
-    {
-        sourceCode: 'ro',
-        targetCode: 'ru',
-        name: 'Română — Familia și școala',
-        words: withReadings([
-            w('măr', 'яблоко'),
-            w('câine', 'собака'),
-            w('pisică', 'кошка'),
-            w('casă', 'дом'),
-            w('școală', 'школа'),
-            w('carte', 'книга'),
-            w('prieten', 'друг'),
-            w('familie', 'семья'),
-            w('mamă', 'мама'),
-            w('tată', 'папа'),
-            w('mulțumesc', 'спасибо', undefined, 'Mulțumesc mult!', 'Большое спасибо!'),
-            w('învățător', 'учитель'),
-        ]),
-    },
-    {
-        sourceCode: 'uk',
-        targetCode: 'ru',
-        name: 'Українська — Родина',
-        words: [
-            w('яблуко', 'яблоко'),
-            w('собака', 'собака'),
-            w('кіт', 'кот'),
-            w('будинок', 'дом'),
-            w('школа', 'школа'),
-            w('книжка', 'книга'),
-            w('друг', 'друг'),
-            w('родина', 'семья'),
-            w('мати', 'мать'),
-            w('батько', 'отец'),
-            w('дякую', 'спасибо'),
-            w('вчитель', 'учитель'),
-        ],
-    },
+export const CATALOG_LANGUAGES: CatalogLanguage[] = [
+    { code: 'en', title: 'English', words: EN_WORDS },
+    { code: 'ro', title: 'Română', words: RO_WORDS },
+    { code: 'uk', title: 'Українська', words: UK_WORDS, reading: ukrainianReading },
 ]
+
+export const CATALOG_TARGET_CODE = 'ru'
+
+export const STARTER_SETS: StarterSet[] = CATALOG_LANGUAGES.flatMap(language =>
+    TOPICS.map(topic => ({
+        id: `${language.code}-${topic.id}`,
+        sourceCode: language.code,
+        targetCode: CATALOG_TARGET_CODE,
+        name: `${language.title} — ${topic.title}`,
+        topicId: topic.id,
+        topicTitle: topic.title,
+        grades: topic.grades,
+        words: parseTopicLines(language.words[topic.id] ?? '').map(word =>
+            language.reading ? { ...word, sourceReading: language.reading(word.sourceText) } : word,
+        ),
+    })),
+).filter(set => set.words.length > 0)

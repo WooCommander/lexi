@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { computed, onMounted, ref } from 'vue'
 import { useRouter } from 'vue-router'
-import { Library, Plus } from 'lucide-vue-next'
+import { Library, PackagePlus, Plus } from 'lucide-vue-next'
 import { LxButton, LxEmptyState, LxPageHeader, LxSpinner } from '@/design-system'
 import WordSetCard from './components/WordSetCard.vue'
 import CreateWordSetModal, { type CreateWordSetPayload } from './components/CreateWordSetModal.vue'
@@ -74,6 +74,9 @@ const create = async (payload: CreateWordSetPayload) => {
     <LxPageHeader :title="isStudent ? 'Мои наборы' : 'Наборы слов'"
       :subtitle="isStudent ? 'Личные слова и наборы от учителя' : 'Ваша библиотека — её можно назначать снова и снова'">
       <template #actions>
+        <LxButton v-if="canCreate" variant="secondary" @click="router.push('/catalog')">
+          <PackagePlus :size="20" /> Готовые наборы
+        </LxButton>
         <LxButton v-if="canCreate" @click="isCreateOpen = true"><Plus :size="20" /> Новый набор</LxButton>
       </template>
     </LxPageHeader>
@@ -100,7 +103,10 @@ const create = async (payload: CreateWordSetPayload) => {
       <LxEmptyState v-if="!ownGroups.length && !assignedSets.length" title="Наборов пока нет"
         :description="canCreate ? 'Создайте первый набор и добавьте в него слова.' : 'Наборы появятся, когда учитель их назначит.'">
         <template #icon><Library :size="36" /></template>
-        <LxButton v-if="canCreate" @click="isCreateOpen = true"><Plus :size="20" /> Создать набор</LxButton>
+        <LxButton v-if="canCreate" @click="router.push('/catalog')"><PackagePlus :size="20" /> Готовые наборы</LxButton>
+        <LxButton v-if="canCreate" variant="secondary" @click="isCreateOpen = true">
+          <Plus :size="20" /> Создать набор
+        </LxButton>
       </LxEmptyState>
     </template>
 

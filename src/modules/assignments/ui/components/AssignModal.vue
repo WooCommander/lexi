@@ -19,6 +19,8 @@ const props = defineProps<{
   source: AssignmentSource
   initialSetId?: string | null
   initialGroupId?: string | null
+  /** Назначение с экрана конкретного ученика: он выбран заранее. */
+  initialStudentId?: string | null
   loading?: boolean
 }>()
 
@@ -41,7 +43,7 @@ watch(
     setId.value = props.initialSetId ?? props.sets[0]?.id ?? null
     groupId.value = props.initialGroupId ?? null
     target.value = props.initialGroupId ? 'group' : 'student'
-    studentId.value = null
+    studentId.value = props.initialStudentId ?? null
     studentIds.value = []
     startAt.value = toISODate(new Date())
     dueAt.value = ''

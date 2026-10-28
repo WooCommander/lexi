@@ -1,10 +1,12 @@
 <script setup lang="ts">
 import { computed, onMounted, ref } from 'vue'
-import { useRouter } from 'vue-router'
+import { useRoute, useRouter } from 'vue-router'
 import { Check, Plus } from 'lucide-vue-next'
 import { LxBadge, LxButton, LxCard, LxEmptyState, LxPageHeader, LxSegmented, LxSpinner } from '@/design-system'
 import { useStarterSets } from '../composables/useStarterSets'
 import { useWordSetsStore } from '../state/useWordSetsStore'
+import { useAssignmentsStore } from '@/modules/assignments/state/useAssignmentsStore'
+import { useStudentsStore } from '@/modules/students/state/useStudentsStore'
 import { useAuthStore } from '@/modules/auth/state/useAuthStore'
 import { UserRole } from '@/modules/auth/domain/User'
 import { useLanguagesStore } from '@/modules/languages/state/useLanguagesStore'
@@ -17,6 +19,9 @@ import { errorMessage } from '@/shared/lib/errors'
 import { wordsLabel } from '@/shared/lib/plural'
 
 const router = useRouter()
+const route = useRoute()
+const assignmentsStore = useAssignmentsStore()
+const students = useStudentsStore()
 const auth = useAuthStore()
 const sets = useWordSetsStore()
 const languages = useLanguagesStore()
@@ -26,10 +31,18 @@ const { add, isAdded, addingId } = useStarterSets()
 
 const isLoading = ref(true)
 
+/** Каталог открыт с экрана ученика: добавленный набор сразу назначается ему. */
+const forStudentId = computed(() =>
+  auth.activeRole !== UserRole.Student && typeof route.query.student === 'string' ? route.query.student : null,
+)
+const forStudentName = computed(() => (forStudentId.value ? students.nameOf(forStudentId.value) : ''))
+const isTeaching = computed(() => auth.activeRole !== UserRole.Student)
+
 onMounted(async () => {
   try {
     await Promise.all([languages.load(), settings.load()])
     await sets.load()
+    if (isTeaching.value) await Promise.all([assignmentsStore.load(), students.load()])
     // первый доступный язык — по умолчанию (изучаемый, если он есть в каталоге)
     languageCode.value = availableLanguages.value[0]?.code ?? ''
   } finally {
@@ -56,6 +69,7 @@ const gradeOptions = [
   { value: 'all' as const, label: 'Все' },
   { value: '2-3' as const, label: GRADE_LABELS['2-3'] },
   { value: '4-6' as const, label: GRADE_LABELS['4-6'] },
+  { value: 'adults' as const, label: GRADE_LABELS.adults },
 ]
 
 
@@ -65,18 +79,47 @@ const visible = computed(() =>
 
 const totalWords = computed(() => visible.value.reduce((n, s) => n + s.words.length, 0))
 
+const setOf = (starter: StarterSet) => sets.sets.find(s => s.name === starter.name)
+
+const isAssigned = (starter: StarterSet) => {
+  const set = setOf(starter)
+  const id = forStudentId.value
+  return !!set && !!id && assignmentsStore.assignments.some(a => a.wordSetId === set.id && a.studentIds.includes(id))
+}
+
+const assignTo = async (wordSetId: string) => {
+  const studentId = forStudentId.value
+  if (!studentId) return
+  await assignmentsStore.create({
+    wordSetId,
+    studentIds: [studentId],
+    source: auth.activeRole === UserRole.Parent ? 'parent' : 'teacher',
+  })
+}
+
 const addOne = async (starter: StarterSet) => {
   try {
-    await add(starter)
-    notify(`Набор «${starter.name}» добавлен`, 'success')
+    const set = setOf(starter) ?? (await add(starter))
+    if (forStudentId.value) {
+      await assignTo(set.id)
+      notify(`«${starter.topicTitle}» добавлен: ${forStudentName.value}`, 'success')
+    } else {
+      notify(`Набор «${starter.name}» добавлен`, 'success')
+    }
   } catch (e) {
     notify(errorMessage(e, 'Не удалось добавить набор'), 'error')
   }
 }
 
 const open = (starter: StarterSet) => {
-  const set = sets.sets.find(s => s.name === starter.name)
+  const set = setOf(starter)
   if (set) router.push(`/sets/${set.id}`)
+}
+
+/** Набор уже есть в библиотеке учителя/родителя — перейти к назначению. */
+const goAssign = (starter: StarterSet) => {
+  const set = setOf(starter)
+  if (set) router.push({ path: '/assignments', query: { set: set.id } })
 }
 
 const sample = (starter: StarterSet) =>
@@ -88,8 +131,8 @@ const sample = (starter: StarterSet) =>
 
 <template>
   <div class="page">
-    <LxPageHeader back="/sets" title="Готовые наборы"
-      subtitle="Слова по темам для школьников: от первых слов до простых текстов" />
+    <LxPageHeader :back="forStudentId ? `/students/${forStudentId}` : '/sets'" title="Готовые наборы"
+      :subtitle="forStudentName ? `Для: ${forStudentName}. Выбранный набор сразу появится у ученика` : 'Слова по темам — школьникам и взрослым: от первых слов до быта, поездок и работы'" />
 
     <div v-if="isLoading" class="center"><LxSpinner /></div>
 
@@ -99,11 +142,11 @@ const sample = (starter: StarterSet) =>
     <template v-else>
       <div class="filters">
         <LxSegmented v-model="languageCode" :options="languageOptions" label="Язык" />
-        <LxSegmented v-model="grade" :options="gradeOptions" label="Класс" />
+        <LxSegmented v-model="grade" :options="gradeOptions" label="Уровень" />
       </div>
 
       <p class="caption">
-        {{ visible.length }} тем · {{ wordsLabel(totalWords) }}. Классы — ориентир по сложности, не жёсткая привязка к программе.
+        {{ visible.length }} тем · {{ wordsLabel(totalWords) }}. Уровни — ориентир, не жёсткая привязка к программе: тему можно взять любую.
       </p>
       <p v-if="!canAdd" class="caption warn">Родитель отключил добавление личных слов.</p>
 
@@ -111,17 +154,28 @@ const sample = (starter: StarterSet) =>
         <LxCard v-for="s in visible" :key="s.id" class="topic">
           <div class="topic__head">
             <h2 class="topic__title">{{ s.topicTitle }}</h2>
-            <LxBadge :tone="s.grades === '2-3' ? 'primary' : 'accent'">{{ GRADE_LABELS[s.grades] }}</LxBadge>
+            <LxBadge :tone="s.grades === '2-3' ? 'primary' : s.grades === '4-6' ? 'accent' : 'success'">{{ GRADE_LABELS[s.grades] }}</LxBadge>
           </div>
           <p class="topic__sample" :lang="s.sourceCode">{{ sample(s) }}…</p>
           <div class="topic__foot">
             <span class="caption">{{ wordsLabel(s.words.length) }}</span>
-            <LxButton v-if="isAdded(s)" variant="secondary" size="sm" @click="open(s)">
-              <Check :size="18" /> Добавлено
-            </LxButton>
-            <LxButton v-else size="sm" :disabled="!canAdd || !!addingId" :loading="addingId === s.id" @click="addOne(s)">
-              <Plus :size="18" /> Добавить
-            </LxButton>
+            <template v-if="forStudentId">
+              <LxButton v-if="isAssigned(s)" variant="secondary" size="sm" @click="open(s)">
+                <Check :size="18" /> Назначено
+              </LxButton>
+              <LxButton v-else size="sm" :disabled="!!addingId" :loading="addingId === s.id" @click="addOne(s)">
+                <Plus :size="18" /> {{ isAdded(s) ? 'Назначить' : 'Добавить' }}
+              </LxButton>
+            </template>
+            <template v-else>
+              <LxButton v-if="isAdded(s)" variant="secondary" size="sm" @click="open(s)">
+                <Check :size="18" /> Добавлено
+              </LxButton>
+              <LxButton v-else size="sm" :disabled="!canAdd || !!addingId" :loading="addingId === s.id" @click="addOne(s)">
+                <Plus :size="18" /> Добавить
+              </LxButton>
+              <LxButton v-if="isTeaching && isAdded(s)" size="sm" @click="goAssign(s)">Назначить</LxButton>
+            </template>
           </div>
         </LxCard>
       </div>

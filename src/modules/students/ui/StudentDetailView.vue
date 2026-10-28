@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { computed, onMounted, ref } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
-import { Check, UserMinus, X } from 'lucide-vue-next'
+import { Check, ClipboardList, PackagePlus, PencilLine, UserMinus, X } from 'lucide-vue-next'
 import {
   LxBadge,
   LxButton,
@@ -14,11 +14,19 @@ import {
   LxSpinner,
 } from '@/design-system'
 import StudentStatsPanel from '@/modules/statistics/ui/components/StudentStatsPanel.vue'
+import AssignModal from '@/modules/assignments/ui/components/AssignModal.vue'
+import CreateWordSetModal, { type CreateWordSetPayload } from '@/modules/word-sets/ui/components/CreateWordSetModal.vue'
+import BulkAddModal from '@/modules/word-sets/ui/components/BulkAddModal.vue'
 import { useStudentsStore } from '../state/useStudentsStore'
 import { StatisticsService, type StudentsStatsData } from '@/modules/statistics/services/StatisticsService'
 import { SettingsService } from '@/modules/settings/services/SettingsService'
 import { DAILY_GOALS, type UserSettings } from '@/modules/settings/domain/UserSettings'
-import { ASSIGNMENT_STATUS_LABELS, AssignmentStatus } from '@/modules/assignments/domain/Assignment'
+import { ASSIGNMENT_STATUS_LABELS, AssignmentStatus, type AssignmentInput } from '@/modules/assignments/domain/Assignment'
+import { useAssignmentsStore } from '@/modules/assignments/state/useAssignmentsStore'
+import { useWordSetsStore } from '@/modules/word-sets/state/useWordSetsStore'
+import { WordSetService } from '@/modules/word-sets/services/WordSetService'
+import { WordSource, type WordSet } from '@/modules/word-sets/domain/WordSet'
+import type { VocabularyItemInput } from '@/modules/vocabulary/domain/VocabularyItem'
 import { TrainingResult } from '@/modules/training/domain/Training'
 import { useLanguagesStore } from '@/modules/languages/state/useLanguagesStore'
 import { useSettingsStore } from '@/modules/settings/state/useSettingsStore'
@@ -33,6 +41,8 @@ const router = useRouter()
 const students = useStudentsStore()
 const languages = useLanguagesStore()
 const mySettings = useSettingsStore()
+const assignmentsStore = useAssignmentsStore()
+const wordSets = useWordSetsStore()
 const { notify } = useNotify()
 
 const studentId = computed(() => String(route.params.id))
@@ -94,6 +104,83 @@ const historyByDay = computed(() => {
   return [...groups.entries()].map(([day, items]) => ({ day, items }))
 })
 
+// --- Слова и задания для этого ученика (учитель / родитель) ---
+const isAssignOpen = ref(false)
+const isCreateOpen = ref(false)
+const isBulkOpen = ref(false)
+const isWorking = ref(false)
+const newSet = ref<WordSet | null>(null)
+
+const roleSource = computed(() => (isParent.value ? 'parent' : 'teacher') as AssignmentInput['source'])
+const wordSource = computed(() => (isParent.value ? WordSource.Parent : WordSource.Teacher))
+
+const reloadStats = async () => {
+  data.value = await StatisticsService.loadForStudents([studentId.value])
+}
+
+const openAssign = async () => {
+  try {
+    await wordSets.load()
+    if (!wordSets.sets.length) {
+      notify('Сначала добавьте слова или возьмите готовый набор', 'info')
+      return
+    }
+    isAssignOpen.value = true
+  } catch (e) {
+    notify(errorMessage(e, 'Не удалось загрузить наборы'), 'error')
+  }
+}
+
+const assign = async (input: AssignmentInput) => {
+  isWorking.value = true
+  try {
+    await assignmentsStore.create(input)
+    isAssignOpen.value = false
+    await reloadStats()
+    tab.value = 'assignments'
+    notify('Набор назначен', 'success')
+  } catch (e) {
+    notify(errorMessage(e, 'Не удалось назначить набор'), 'error')
+  } finally {
+    isWorking.value = false
+  }
+}
+
+/** Шаг 1: название и языки нового набора. */
+const createSet = async (payload: CreateWordSetPayload) => {
+  isWorking.value = true
+  try {
+    newSet.value = await wordSets.create({ ...payload, source: wordSource.value })
+    isCreateOpen.value = false
+    isBulkOpen.value = true
+  } catch (e) {
+    notify(errorMessage(e, 'Не удалось создать набор'), 'error')
+  } finally {
+    isWorking.value = false
+  }
+}
+
+/** Шаг 2: слова добавлены — сразу назначаем набор этому ученику. */
+const saveWords = async (items: VocabularyItemInput[]) => {
+  const set = newSet.value
+  if (!set) return
+  isWorking.value = true
+  try {
+    await WordSetService.addWords(set, items, 0)
+    wordSets.setItemCount(set.id, items.length)
+    await assignmentsStore.create({ wordSetId: set.id, studentIds: [studentId.value], source: roleSource.value })
+    isBulkOpen.value = false
+    newSet.value = null
+    await reloadStats()
+    tab.value = 'assignments'
+    notify(`Слова добавлены и назначены: ${name.value}`, 'success')
+  } catch (e) {
+    notify(errorMessage(e, 'Не удалось добавить слова'), 'error')
+  } finally {
+    isWorking.value = false
+  }
+}
+
 // --- Настройки ребёнка (родитель) ---
 const goalOptions = DAILY_GOALS.map(n => ({ value: n as number, label: String(n) }))
 
@@ -132,7 +219,12 @@ const unlink = async () => {
   <div class="page">
     <LxPageHeader back="/students" :title="name" :subtitle="isParent ? 'Ребёнок' : 'Ученик'">
       <template #actions>
-        <LxButton variant="secondary" @click="isUnlinkOpen = true"><UserMinus :size="20" /> Отключить</LxButton>
+        <LxButton variant="secondary" @click="isCreateOpen = true"><PencilLine :size="20" /> Добавить слова</LxButton>
+        <LxButton variant="secondary" @click="router.push({ path: '/catalog', query: { student: studentId } })">
+          <PackagePlus :size="20" /> Готовые наборы
+        </LxButton>
+        <LxButton variant="secondary" @click="openAssign"><ClipboardList :size="20" /> Назначить набор</LxButton>
+        <LxButton variant="ghost" @click="isUnlinkOpen = true"><UserMinus :size="20" /> Отключить</LxButton>
       </template>
     </LxPageHeader>
 
@@ -145,7 +237,8 @@ const unlink = async () => {
         :native-language-id="childSettings?.nativeLanguageId ?? mySettings.settings?.nativeLanguageId ?? null" />
 
       <section v-else-if="tab === 'assignments'" class="section">
-        <LxEmptyState v-if="!assignments.length" compact title="Заданий нет" />
+        <LxEmptyState v-if="!assignments.length" compact title="Заданий нет"
+          :description="`Добавьте слова, возьмите готовый набор или назначьте свой — ${name} увидит их у себя.`" />
         <div v-else class="lx-table-wrap">
           <table class="lx-table">
             <thead>
@@ -204,6 +297,11 @@ const unlink = async () => {
         </LxCard>
       </section>
     </template>
+
+    <AssignModal v-model:visible="isAssignOpen" :sets="wordSets.sets" :students="students.students" :groups="[]"
+      :source="roleSource" :initial-student-id="studentId" :loading="isWorking" @submit="assign" />
+    <CreateWordSetModal v-model:visible="isCreateOpen" :loading="isWorking" @submit="createSet" />
+    <BulkAddModal v-if="newSet" v-model:visible="isBulkOpen" :pair="newSet" :loading="isWorking" @submit="saveWords" />
 
     <LxConfirmationModal v-model:visible="isUnlinkOpen" :title="`Отключить ${name}?`"
       message="Вы больше не будете видеть прогресс. Ученик сможет подключиться снова по коду."

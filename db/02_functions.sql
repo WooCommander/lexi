@@ -10,8 +10,9 @@
 create or replace function handle_new_user()
 returns trigger language plpgsql security definer set search_path = public as $$
 declare
-  r     text;
-  roles jsonb := new.raw_user_meta_data -> 'roles';
+  r        text;
+  roles    jsonb := new.raw_user_meta_data -> 'roles';
+  assigned int := 0;
 begin
   insert into profiles (id, name)
   values (new.id, coalesce(nullif(trim(new.raw_user_meta_data ->> 'name'), ''), split_part(new.email, '@', 1)))
@@ -21,11 +22,16 @@ begin
     roles := '["student"]'::jsonb;
   end if;
 
+  -- 'admin' из метаданных регистрации игнорируется: администратора назначают только вручную (grant_admin).
   for r in select jsonb_array_elements_text(roles) loop
     if r in ('student', 'parent', 'teacher') then
       insert into user_roles (user_id, role) values (new.id, r) on conflict do nothing;
+      assigned := assigned + 1;
     end if;
   end loop;
+  if assigned = 0 then
+    insert into user_roles (user_id, role) values (new.id, 'student') on conflict do nothing;
+  end if;
 
   insert into user_settings (user_id, native_language_id)
   values (new.id, (select id from languages where code = 'ru'))
@@ -172,18 +178,148 @@ grant execute on function redeem_invite_code(text)  to authenticated;
 revoke execute on function preview_invite_code(text) from public, anon;
 revoke execute on function redeem_invite_code(text)  from public, anon;
 
--- ---------- Ограничения родителя --------------------------------------
--- RLS разрешает ребёнку обновлять свою строку user_settings целиком, поэтому запреты родителя
--- (доступные языки, личные слова) защищаем триггером: пока у ребёнка есть родитель,
--- менять эти два поля может только родитель. service_role и SQL Editor (auth.uid() is null) не затрагиваются.
+-- ---------- Администратор -------------------------------------------
+-- Роль 'admin' нельзя выдать себе через API (см. политику "roles insert").
+-- Первого администратора назначают в SQL Editor:  select grant_admin('почта@пример.ru');
+
+create or replace function is_admin()
+returns boolean language sql security definer stable set search_path = public as $$
+  select exists (select 1 from user_roles where user_id = auth.uid() and role = 'admin');
+$$;
+
+create or replace function require_admin()
+returns void language plpgsql security definer set search_path = public as $$
+begin
+  if not is_admin() then
+    raise exception 'forbidden' using errcode = '42501';
+  end if;
+end $$;
+
+-- Только владелец БД / SQL Editor: выдать роль администратора по почте.
+create or replace function grant_admin(p_email text)
+returns void language plpgsql security definer set search_path = public as $$
+declare v_id uuid;
+begin
+  select id into v_id from auth.users where lower(email) = lower(trim(p_email));
+  if v_id is null then
+    raise exception 'user_not_found';
+  end if;
+  insert into profiles (id, name) values (v_id, split_part(trim(p_email), '@', 1)) on conflict (id) do nothing;
+  insert into user_roles (user_id, role) values (v_id, 'admin') on conflict do nothing;
+end $$;
+
+-- Последнего администратора из приложения не снять: иначе управление потеряно.
+-- Из SQL Editor (auth.uid() is null) ограничение не действует.
+create or replace function guard_last_admin()
+returns trigger language plpgsql security definer set search_path = public as $$
+begin
+  if auth.uid() is not null
+     and old.role = 'admin'
+     and (select count(*) from user_roles where role = 'admin') <= 1
+  then
+    raise exception 'last_admin' using errcode = '42501';
+  end if;
+  return old;
+end $$;
+
+drop trigger if exists user_roles_guard_last_admin on user_roles;
+create trigger user_roles_guard_last_admin
+  before delete on user_roles
+  for each row execute function guard_last_admin();
+
+-- Сводка по всем пользователям.
+create or replace function admin_overview()
+returns json language plpgsql security definer set search_path = public as $$
+begin
+  perform require_admin();
+  return json_build_object(
+    'users',            (select count(*) from profiles),
+    'by_role',          (select coalesce(json_object_agg(role, n), '{}'::json)
+                         from (select role, count(*) as n from user_roles group by role) r),
+    'active_7d',        (select count(distinct student_id) from review_history where created_at >= now() - interval '7 days'),
+    'answers_7d',       (select count(*) from review_history where created_at >= now() - interval '7 days'),
+    'learned_words',    (select count(*) from word_progress where status = 'learned'),
+    'vocabulary_items', (select count(*) from vocabulary_items),
+    'word_sets',        (select count(*) from word_sets),
+    'assignments',      (select count(*) from assignments),
+    'groups',           (select count(*) from groups)
+  );
+end $$;
+
+-- Рейтинг по числу освоенных слов среди всех пользователей.
+create or replace function admin_top_learners(p_limit int default 20)
+returns table (student_id uuid, name text, learned bigint, correct bigint, wrong bigint, last_active timestamptz)
+language plpgsql security definer set search_path = public as $$
+begin
+  perform require_admin();
+  return query
+    select p.id, p.name,
+           count(*) filter (where wp.status = 'learned'),
+           coalesce(sum(wp.correct_answers), 0)::bigint,
+           coalesce(sum(wp.wrong_answers), 0)::bigint,
+           max(wp.last_reviewed_at)
+    from profiles p
+    join word_progress wp on wp.student_id = p.id
+    group by p.id, p.name
+    order by 3 desc, 4 desc, p.name
+    limit greatest(1, least(coalesce(p_limit, 20), 100));
+end $$;
+
+-- Все пользователи с почтой и последним входом (почта живёт в auth.users, клиенту она недоступна).
+create or replace function admin_list_users()
+returns table (id uuid, name text, email text, roles text[], created_at timestamptz, last_sign_in_at timestamptz)
+language plpgsql security definer set search_path = public as $$
+begin
+  perform require_admin();
+  return query
+    select p.id, p.name, u.email::text,
+           coalesce((select array_agg(r.role order by r.role) from user_roles r where r.user_id = p.id), '{}'::text[]),
+           p.created_at, u.last_sign_in_at
+    from profiles p
+    left join auth.users u on u.id = p.id
+    order by p.created_at desc;
+end $$;
+
+-- Полное удаление пользователя вместе с его данными. Себя удалить нельзя.
+create or replace function admin_delete_user(p_user uuid)
+returns void language plpgsql security definer set search_path = public as $$
+begin
+  perform require_admin();
+  if p_user = auth.uid() then
+    raise exception 'cannot_delete_self' using errcode = '42501';
+  end if;
+  delete from auth.users where id = p_user;
+end $$;
+
+revoke execute on function grant_admin(text) from public, anon, authenticated;
+revoke execute on function require_admin(), admin_overview(), admin_top_learners(int),
+  admin_list_users(), admin_delete_user(uuid) from public, anon;
+grant execute on function admin_overview(), admin_top_learners(int), admin_list_users(), admin_delete_user(uuid)
+  to authenticated;
+
+-- ---------- Профиль: что ребёнок меняет сам, а что — только родитель -------------
+-- Пока у пользователя есть родитель, он «управляемый». Сам он может: имя, число слов в тренировке,
+-- тему/озвучку (на устройстве). Дневная цель, цели по языкам, родной язык, доступные языки,
+-- личные слова и роли — только родитель. Пользователи без родителя свободны.
+-- RLS разрешает строку user_settings целиком, поэтому защищаем триггером; service_role и
+-- SQL Editor (auth.uid() is null) не затрагиваются.
+create or replace function is_managed_by_parent(p_user uuid)
+returns boolean language sql security definer stable set search_path = public as $$
+  select exists (select 1 from parent_students where student_id = p_user);
+$$;
+
 create or replace function guard_parent_restrictions()
 returns trigger language plpgsql security definer set search_path = public as $$
 begin
   if auth.uid() is not null
      and auth.uid() = new.user_id
      and (new.allowed_language_ids is distinct from old.allowed_language_ids
-          or new.allow_personal_words is distinct from old.allow_personal_words)
-     and exists (select 1 from parent_students where student_id = new.user_id)
+          or new.allow_personal_words is distinct from old.allow_personal_words
+          or new.daily_goal is distinct from old.daily_goal
+          or new.language_goals is distinct from old.language_goals
+          or new.native_language_id is distinct from old.native_language_id)
+     and is_managed_by_parent(new.user_id)
+     and not is_admin()
   then
     raise exception 'restricted_by_parent' using errcode = '42501';
   end if;

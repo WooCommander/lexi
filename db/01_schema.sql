@@ -20,9 +20,14 @@ create table if not exists profiles (
 -- Один пользователь может иметь несколько ролей.
 create table if not exists user_roles (
   user_id  uuid not null references profiles on delete cascade,
-  role     text not null check (role in ('student', 'parent', 'teacher')),
+  role     text not null check (role in ('student', 'parent', 'teacher', 'admin')),
   primary key (user_id, role)
 );
+
+-- Для баз, созданных до роли администратора: расширяем список допустимых ролей.
+alter table user_roles drop constraint if exists user_roles_role_check;
+alter table user_roles add constraint user_roles_role_check
+  check (role in ('student', 'parent', 'teacher', 'admin'));
 
 -- ---------- Языки ----------------------------------------------------
 

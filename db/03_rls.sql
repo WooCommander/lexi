@@ -38,10 +38,11 @@ drop policy if exists "roles insert" on user_roles;
 drop policy if exists "roles delete" on user_roles;
 create policy "roles read" on user_roles for select
   using (user_id = auth.uid() or is_linked_with(user_id));
+-- Роль администратора себе выдать нельзя; «управляемый» (с родителем) ребёнок роли не меняет.
 create policy "roles insert" on user_roles for insert
-  with check (user_id = auth.uid());
+  with check (user_id = auth.uid() and role <> 'admin' and not is_managed_by_parent(auth.uid()));
 create policy "roles delete" on user_roles for delete
-  using (user_id = auth.uid());
+  using (user_id = auth.uid() and not is_managed_by_parent(auth.uid()));
 
 -- ---------- languages ------------------------------------------------
 drop policy if exists "languages read"   on languages;
@@ -54,13 +55,13 @@ create policy "languages update" on languages for update
   using (created_by = auth.uid()) with check (created_by = auth.uid());
 
 -- ---------- parent_students / teacher_students -----------------------
--- Создаются только через redeem_invite_code(). Разорвать связь может любая сторона.
+-- Создаются только через redeem_invite_code(). Связь с родителем разрывает только родитель, с учителем — любая сторона.
 drop policy if exists "parent links read"   on parent_students;
 drop policy if exists "parent links delete" on parent_students;
 create policy "parent links read" on parent_students for select
   using (parent_id = auth.uid() or student_id = auth.uid());
 create policy "parent links delete" on parent_students for delete
-  using (parent_id = auth.uid() or student_id = auth.uid());
+  using (parent_id = auth.uid());
 
 drop policy if exists "teacher links read"   on teacher_students;
 drop policy if exists "teacher links delete" on teacher_students;
@@ -187,3 +188,39 @@ create policy "settings insert" on user_settings for insert
 create policy "settings update" on user_settings for update
   using (user_id = auth.uid() or is_parent_of(user_id))
   with check (user_id = auth.uid() or is_parent_of(user_id));
+
+-- ---------- Администратор: полный доступ ко всем таблицам ---------------
+drop policy if exists "admin all" on profiles;
+create policy "admin all" on profiles for all using (is_admin()) with check (is_admin());
+drop policy if exists "admin all" on user_roles;
+create policy "admin all" on user_roles for all using (is_admin()) with check (is_admin());
+drop policy if exists "admin all" on languages;
+create policy "admin all" on languages for all using (is_admin()) with check (is_admin());
+drop policy if exists "admin all" on parent_students;
+create policy "admin all" on parent_students for all using (is_admin()) with check (is_admin());
+drop policy if exists "admin all" on teacher_students;
+create policy "admin all" on teacher_students for all using (is_admin()) with check (is_admin());
+drop policy if exists "admin all" on groups;
+create policy "admin all" on groups for all using (is_admin()) with check (is_admin());
+drop policy if exists "admin all" on group_students;
+create policy "admin all" on group_students for all using (is_admin()) with check (is_admin());
+drop policy if exists "admin all" on invite_codes;
+create policy "admin all" on invite_codes for all using (is_admin()) with check (is_admin());
+drop policy if exists "admin all" on vocabulary_items;
+create policy "admin all" on vocabulary_items for all using (is_admin()) with check (is_admin());
+drop policy if exists "admin all" on word_sets;
+create policy "admin all" on word_sets for all using (is_admin()) with check (is_admin());
+drop policy if exists "admin all" on word_set_items;
+create policy "admin all" on word_set_items for all using (is_admin()) with check (is_admin());
+drop policy if exists "admin all" on assignments;
+create policy "admin all" on assignments for all using (is_admin()) with check (is_admin());
+drop policy if exists "admin all" on assignment_students;
+create policy "admin all" on assignment_students for all using (is_admin()) with check (is_admin());
+drop policy if exists "admin all" on word_progress;
+create policy "admin all" on word_progress for all using (is_admin()) with check (is_admin());
+drop policy if exists "admin all" on review_history;
+create policy "admin all" on review_history for all using (is_admin()) with check (is_admin());
+drop policy if exists "admin all" on favorites;
+create policy "admin all" on favorites for all using (is_admin()) with check (is_admin());
+drop policy if exists "admin all" on user_settings;
+create policy "admin all" on user_settings for all using (is_admin()) with check (is_admin());

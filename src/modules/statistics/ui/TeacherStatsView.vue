@@ -1,10 +1,19 @@
 <script setup lang="ts">
 import { computed, onMounted, ref } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
-import { BarChart3 } from 'lucide-vue-next'
+import { BarChart3, MoonStar, Trophy } from 'lucide-vue-next'
 import { LxBadge, LxCard, LxEmptyState, LxPageHeader, LxSelect, LxSpinner, LxStatTile } from '@/design-system'
 import { StatisticsService, progressMapFor, studentItemIds, type StudentsStatsData } from '../services/StatisticsService'
-import { formatPercent, historyAccuracy, summarize } from '../lib/aggregate'
+import ActivityChart from './components/ActivityChart.vue'
+import { activityByDay, formatPercent, historyAccuracy, streakDays, summarize } from '../lib/aggregate'
+import {
+  bestKnownWords,
+  groupRows,
+  inactiveStudents,
+  rankStudents,
+  type StudentMetrics,
+  type WordKnowledge,
+} from '../lib/rankings'
 import { accuracy, DifficultWordsService } from '@/modules/training/lib/DifficultWordsService'
 import { studiedLanguageId } from '@/modules/languages/domain/Language'
 import { useLanguagesStore } from '@/modules/languages/state/useLanguagesStore'
@@ -12,6 +21,7 @@ import { useStudentsStore } from '@/modules/students/state/useStudentsStore'
 import { useGroupsStore } from '@/modules/groups/state/useGroupsStore'
 import { useSettingsStore } from '@/modules/settings/state/useSettingsStore'
 import { useAuthStore } from '@/modules/auth/state/useAuthStore'
+import { TrainingResult, WordLearningStatus } from '@/modules/training/domain/Training'
 import { addDays } from '@/shared/lib/dates'
 import { useNotify } from '@/shared/composables/useNotify'
 import { errorMessage } from '@/shared/lib/errors'
@@ -81,6 +91,71 @@ const periodHistory = computed(() =>
     h => filteredStudentIds.value.includes(h.studentId) && new Date(h.createdAt) >= since.value && matchesLanguage(h.vocabularyItemId),
   ),
 )
+
+// --- Рейтинг, классы, внимание: всё считается по тем же фильтрам (группа, язык, набор, период) ---
+const metrics = computed<StudentMetrics[]>(() => {
+  const d = data.value
+  if (!d) return []
+  return filteredStudentIds.value.map(sid => {
+    const ids = [...studentItemIds(d, sid, setId.value)].filter(matchesLanguage)
+    const idSet = new Set(ids)
+    const summary = summarize(ids, progressMapFor(d, sid))
+    const own = d.history.filter(h => h.studentId === sid)
+    const period = periodHistory.value.filter(h => h.studentId === sid && idSet.has(h.vocabularyItemId))
+    let correct = 0
+    for (const h of period) if (h.result === TrainingResult.Correct) correct++
+    return {
+      studentId: sid,
+      name: students.nameOf(sid),
+      learned: summary.learned,
+      total: summary.total,
+      correct,
+      wrong: period.length - correct,
+      activeDays: new Set(period.map(h => h.createdAt.slice(0, 10))).size,
+      streak: streakDays(own),
+      lastActiveAt: own.reduce<string | undefined>((max, h) => (!max || h.createdAt > max ? h.createdAt : max), undefined),
+    }
+  })
+})
+
+const ranking = computed(() => rankStudents(metrics.value))
+
+const groupTable = computed(() =>
+  groupRows(
+    groups.groups
+      .filter(g => !groupId.value || g.id === groupId.value)
+      .map(g => ({ id: g.id, name: g.name, studentIds: g.studentIds })),
+    metrics.value,
+  ),
+)
+
+const needAttention = computed(() => inactiveStudents(metrics.value))
+
+const activity = computed(() => activityByDay(periodHistory.value, periodDays.value))
+
+const knownWords = computed(() => {
+  const d = data.value
+  if (!d) return []
+  const allowed = setId.value ? new Set(d.entries.filter(e => e.wordSetId === setId.value).map(e => e.item.id)) : null
+  const agg = new Map<string, WordKnowledge>()
+  for (const p of d.progress) {
+    if (!filteredStudentIds.value.includes(p.studentId)) continue
+    if (allowed && !allowed.has(p.vocabularyItemId)) continue
+    if (!matchesLanguage(p.vocabularyItemId)) continue
+    const w = agg.get(p.vocabularyItemId) ?? { itemId: p.vocabularyItemId, learnedBy: 0, students: 0, correct: 0, wrong: 0 }
+    w.students++
+    w.correct += p.correctAnswers
+    w.wrong += p.wrongAnswers
+    if (p.status === WordLearningStatus.Learned) w.learnedBy++
+    agg.set(p.vocabularyItemId, w)
+  }
+  return bestKnownWords([...agg.values()], 10).filter(w => d.items.has(w.itemId))
+})
+
+const MEDALS = ['🥇', '🥈', '🥉']
+const place = (rank: number) => MEDALS[rank - 1] ?? String(rank)
+const lastSeen = (daysAgo: number) =>
+  daysAgo === Infinity ? 'ещё не занимался' : `${daysAgo} дн. назад`
 
 // --- Таблица учеников: «Назначено / Изучено / Точность» по каждому языку ---
 const studentRows = computed(() => {
@@ -215,6 +290,73 @@ const dirTitle = (item: { sourceLanguageId: string; targetLanguageId: string }, 
         <LxStatTile label="Слабых слов" :value="totals.difficult" tone="error" />
       </section>
 
+      <section v-if="ranking.length" class="section">
+        <h2 class="section-title"><Trophy :size="20" /> Кто освоил больше всего слов</h2>
+        <div class="lx-table-wrap">
+          <table class="lx-table">
+            <thead>
+              <tr>
+                <th class="num">#</th><th>Ученик</th><th class="num">Освоено</th><th class="num">Точность</th>
+                <th class="num">Дней занятий</th><th class="num">Серия</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr v-for="r in ranking" :key="r.studentId" class="clickable" @click="router.push(`/students/${r.studentId}`)">
+                <td class="num place">{{ place(r.rank) }}</td>
+                <td><b>{{ r.name }}</b></td>
+                <td class="num"><b>{{ r.learned }}</b> <span class="muted">из {{ r.total }}</span></td>
+                <td class="num">{{ formatPercent(r.accuracy) }}</td>
+                <td class="num">{{ r.activeDays }}</td>
+                <td class="num">{{ r.streak ? `${r.streak} дн.` : '—' }}</td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+        <p class="caption">«Освоено» — слова со статусом «Изучено». Точность и дни занятий — за выбранный период.</p>
+      </section>
+
+      <section v-if="groupTable.length > 1" class="section">
+        <h2 class="section-title">Классы и группы</h2>
+        <div class="lx-table-wrap">
+          <table class="lx-table">
+            <thead>
+              <tr>
+                <th>Группа</th><th class="num">Учеников</th><th class="num">Освоено всего</th>
+                <th class="num">В среднем на ученика</th><th class="num">Точность</th><th class="num">Занимались за 7 дней</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr v-for="g in groupTable" :key="g.id" :class="{ clickable: g.id !== 'no-group' }"
+                @click="g.id !== 'no-group' && (groupId = g.id)">
+                <td><b>{{ g.name }}</b></td>
+                <td class="num">{{ g.students }}</td>
+                <td class="num">{{ g.learned }}</td>
+                <td class="num"><b>{{ g.avgLearned.toFixed(1) }}</b></td>
+                <td class="num">{{ formatPercent(g.accuracy) }}</td>
+                <td class="num">{{ formatPercent(g.activeShare) }}</td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+      </section>
+
+      <section v-if="needAttention.length" class="section">
+        <h2 class="section-title"><MoonStar :size="20" /> Давно не занимались</h2>
+        <LxCard padding="sm">
+          <ul class="attention">
+            <li v-for="s in needAttention" :key="s.studentId" class="clickable" @click="router.push(`/students/${s.studentId}`)">
+              <b>{{ s.name }}</b>
+              <LxBadge tone="warning">{{ lastSeen(s.daysAgo) }}</LxBadge>
+            </li>
+          </ul>
+        </LxCard>
+      </section>
+
+      <section class="section">
+        <h2 class="section-title">Активность за {{ periodDays }} дн.</h2>
+        <LxCard><ActivityChart :days="activity" /></LxCard>
+      </section>
+
       <section class="section">
         <h2 class="section-title">Ученики</h2>
         <div class="lx-table-wrap">
@@ -260,6 +402,27 @@ const dirTitle = (item: { sourceLanguageId: string; targetLanguageId: string }, 
         </div>
       </section>
 
+      <section v-if="knownWords.length" class="section">
+        <h2 class="section-title">Слова — лучше всего знают</h2>
+        <div class="lx-table-wrap">
+          <table class="lx-table">
+            <thead>
+              <tr><th>Слово</th><th class="num">Освоили</th><th class="num">Ответов</th></tr>
+            </thead>
+            <tbody>
+              <tr v-for="w in knownWords" :key="w.itemId">
+                <td>
+                  <b>{{ data.items.get(w.itemId)!.sourceText }}</b>
+                  <span class="muted"> / {{ data.items.get(w.itemId)!.targetText }}</span>
+                </td>
+                <td class="num">{{ w.learnedBy }} из {{ w.students }}</td>
+                <td class="num">{{ w.correct + w.wrong }}</td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+      </section>
+
       <section v-if="wordRows.length" class="section">
         <h2 class="section-title">Слова — слабые места</h2>
         <div class="lx-table-wrap">
@@ -295,6 +458,32 @@ const dirTitle = (item: { sourceLanguageId: string; targetLanguageId: string }, 
   justify-content: center;
   padding: var(--space-7);
   color: var(--color-primary);
+}
+
+.place {
+  font-size: 1.25rem;
+  line-height: 1;
+}
+
+.attention {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+
+  li {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: var(--space-3);
+    padding: var(--space-2) var(--space-1);
+    min-height: 44px;
+
+    & + li {
+      border-top: 1px solid var(--color-border);
+    }
+  }
 }
 
 .filters {

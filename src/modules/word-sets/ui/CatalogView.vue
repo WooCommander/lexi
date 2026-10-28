@@ -1,8 +1,9 @@
 <script setup lang="ts">
 import { computed, onMounted, ref } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
-import { Check, Plus } from 'lucide-vue-next'
+import { Check, ListChecks, Plus } from 'lucide-vue-next'
 import { LxBadge, LxButton, LxCard, LxEmptyState, LxPageHeader, LxSegmented, LxSpinner } from '@/design-system'
+import PickWordsModal, { type PickWordsPayload } from './components/PickWordsModal.vue'
 import { useStarterSets } from '../composables/useStarterSets'
 import { useWordSetsStore } from '../state/useWordSetsStore'
 import { useAssignmentsStore } from '@/modules/assignments/state/useAssignmentsStore'
@@ -27,7 +28,7 @@ const sets = useWordSetsStore()
 const languages = useLanguagesStore()
 const settings = useSettingsStore()
 const { notify } = useNotify()
-const { add, isAdded, addingId } = useStarterSets()
+const { add, addSelected, targetsFor, isAdded, addingId } = useStarterSets()
 
 const isLoading = ref(true)
 
@@ -111,6 +112,34 @@ const addOne = async (starter: StarterSet) => {
   }
 }
 
+// --- Собрать свой набор из выбранных слов ---
+const pickingStarter = ref<StarterSet | null>(null)
+const isPickOpen = ref(false)
+const isPicking = ref(false)
+
+const openPick = (starter: StarterSet) => {
+  pickingStarter.value = starter
+  isPickOpen.value = true
+}
+
+const submitPick = async (payload: PickWordsPayload) => {
+  const starter = pickingStarter.value
+  if (!starter) return
+  isPicking.value = true
+  try {
+    const { set, added, skipped } = await addSelected(starter, payload.words, payload)
+    isPickOpen.value = false
+    notify(
+      skipped ? `В набор «${set.name}» добавлено ${added}, повторов пропущено: ${skipped}` : `В набор «${set.name}» добавлено слов: ${added}`,
+      'success',
+    )
+  } catch (e) {
+    notify(errorMessage(e, 'Не удалось добавить слова'), 'error')
+  } finally {
+    isPicking.value = false
+  }
+}
+
 const open = (starter: StarterSet) => {
   const set = setOf(starter)
   if (set) router.push(`/sets/${set.id}`)
@@ -168,6 +197,9 @@ const sample = (starter: StarterSet) =>
               </LxButton>
             </template>
             <template v-else>
+              <LxButton variant="ghost" size="sm" :disabled="!canAdd" @click="openPick(s)">
+                <ListChecks :size="18" /> Выбрать слова
+              </LxButton>
               <LxButton v-if="isAdded(s)" variant="secondary" size="sm" @click="open(s)">
                 <Check :size="18" /> Добавлено
               </LxButton>
@@ -180,6 +212,9 @@ const sample = (starter: StarterSet) =>
         </LxCard>
       </div>
     </template>
+
+    <PickWordsModal v-model:visible="isPickOpen" :starter="pickingStarter" :targets="pickingStarter ? targetsFor(pickingStarter) : []"
+      :loading="isPicking" @submit="submitPick" />
   </div>
 </template>
 
@@ -237,6 +272,7 @@ const sample = (starter: StarterSet) =>
   &__foot {
     margin-top: auto;
     display: flex;
+    flex-wrap: wrap;
     align-items: center;
     justify-content: space-between;
     gap: var(--space-3);

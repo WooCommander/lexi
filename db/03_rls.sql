@@ -108,7 +108,7 @@ drop policy if exists "vocab delete" on vocabulary_items;
 create policy "vocab read" on vocabulary_items for select
   using (created_by = auth.uid() or can_read_vocab_item(id));
 create policy "vocab insert" on vocabulary_items for insert
-  with check (created_by = auth.uid());
+  with check (created_by = auth.uid() and personal_words_allowed(auth.uid()));
 create policy "vocab update" on vocabulary_items for update
   using (created_by = auth.uid()) with check (created_by = auth.uid());
 create policy "vocab delete" on vocabulary_items for delete
@@ -117,12 +117,19 @@ create policy "vocab delete" on vocabulary_items for delete
 -- ---------- word_sets ------------------------------------------------
 -- Ученик не может изменить оригинальный набор учителя: писать может только владелец.
 drop policy if exists "sets read"  on word_sets;
-drop policy if exists "sets write" on word_sets;
+drop policy if exists "sets write"  on word_sets;
+drop policy if exists "sets insert" on word_sets;
+drop policy if exists "sets update" on word_sets;
+drop policy if exists "sets delete" on word_sets;
 create policy "sets read" on word_sets for select
   using (owner_id = auth.uid() or can_read_word_set(id));
-create policy "sets write" on word_sets for all
-  using (owner_id = auth.uid())
-  with check (owner_id = auth.uid());
+-- Создать личный набор нельзя, если родитель запретил личные слова (раньше запрет был только в интерфейсе).
+create policy "sets insert" on word_sets for insert
+  with check (owner_id = auth.uid() and (source <> 'personal' or personal_words_allowed(auth.uid())));
+create policy "sets update" on word_sets for update
+  using (owner_id = auth.uid()) with check (owner_id = auth.uid());
+create policy "sets delete" on word_sets for delete
+  using (owner_id = auth.uid());
 
 drop policy if exists "set items read"  on word_set_items;
 drop policy if exists "set items write" on word_set_items;

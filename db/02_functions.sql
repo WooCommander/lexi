@@ -291,11 +291,164 @@ begin
   delete from auth.users where id = p_user;
 end $$;
 
+-- Активность по дням: сколько пользователей занималось и сколько ответов дали.
+create or replace function admin_activity(p_days int default 30)
+returns table (day date, active_users bigint, answers bigint, correct bigint)
+language plpgsql security definer set search_path = public as $$
+declare n int := greatest(1, least(coalesce(p_days, 30), 365));
+begin
+  perform require_admin();
+  return query
+    select d::date,
+           coalesce(count(distinct h.student_id), 0),
+           coalesce(count(h.id), 0),
+           coalesce(count(h.id) filter (where h.result = 'correct'), 0)
+    from generate_series(current_date - (n - 1), current_date, interval '1 day') d
+    left join review_history h on h.created_at >= d and h.created_at < d + interval '1 day'
+    group by d
+    order by d;
+end $$;
+
+-- Новые пользователи по дням и ролям.
+create or replace function admin_signups(p_days int default 30)
+returns table (day date, students bigint, teachers bigint, parents bigint)
+language plpgsql security definer set search_path = public as $$
+declare n int := greatest(1, least(coalesce(p_days, 30), 365));
+begin
+  perform require_admin();
+  return query
+    select d::date,
+           coalesce(count(*) filter (where r.role = 'student'), 0),
+           coalesce(count(*) filter (where r.role = 'teacher'), 0),
+           coalesce(count(*) filter (where r.role = 'parent'), 0)
+    from generate_series(current_date - (n - 1), current_date, interval '1 day') d
+    left join profiles p on p.created_at >= d and p.created_at < d + interval '1 day'
+    left join user_roles r on r.user_id = p.id
+    group by d
+    order by d;
+end $$;
+
+-- Сколько учеников освоили 0 / 1–9 / 10–49 / 50–99 / 100+ слов.
+create or replace function admin_learned_distribution()
+returns table (bucket text, ord int, students bigint)
+language plpgsql security definer set search_path = public as $$
+begin
+  perform require_admin();
+  return query
+    with per_student as (
+      select r.user_id,
+             (select count(*) from word_progress wp where wp.student_id = r.user_id and wp.status = 'learned') as learned
+      from user_roles r where r.role = 'student'
+    )
+    select b.label, b.ord, coalesce(count(ps.user_id), 0)
+    from (values ('0', 1, 0, 0), ('1–9', 2, 1, 9), ('10–49', 3, 10, 49), ('50–99', 4, 50, 99), ('100+', 5, 100, 2147483647))
+         as b(label, ord, lo, hi)
+    left join per_student ps on ps.learned between b.lo and b.hi
+    group by b.label, b.ord
+    order by b.ord;
+end $$;
+
+-- Языки: сколько учеников учит, сколько слов освоено, ответов за 30 дней.
+-- Изучаемый язык пары — тот, что не родной для ученика (родной из user_settings, по умолчанию русский).
+create or replace function admin_language_stats()
+returns table (language_id uuid, code text, name text, learners bigint, learned bigint, answers_30d bigint)
+language plpgsql security definer set search_path = public as $$
+begin
+  perform require_admin();
+  return query
+    with ru as (select l.id from languages l where l.code = 'ru'),
+    studied as (
+      select wp.student_id, wp.status,
+             case when vi.source_language_id = coalesce(us.native_language_id, (select id from ru))
+                  then vi.target_language_id else vi.source_language_id end as lang
+      from word_progress wp
+      join vocabulary_items vi on vi.id = wp.vocabulary_item_id
+      left join user_settings us on us.user_id = wp.student_id
+    ),
+    per_language as (
+      select lang, count(distinct student_id) as learners, count(*) filter (where status = 'learned') as learned
+      from studied group by lang
+    ),
+    recent as (
+      select case when hv.source_language_id = coalesce(us.native_language_id, (select id from ru))
+                  then hv.target_language_id else hv.source_language_id end as lang,
+             count(*) as answers
+      from review_history h
+      join vocabulary_items hv on hv.id = h.vocabulary_item_id
+      left join user_settings us on us.user_id = h.student_id
+      where h.created_at >= now() - interval '30 days'
+      group by 1
+    )
+    select l.id, l.code, coalesce(l.display_name, l.native_name, l.name),
+           pl.learners, pl.learned, coalesce(r.answers, 0)
+    from per_language pl
+    join languages l on l.id = pl.lang
+    left join recent r on r.lang = pl.lang
+    order by pl.learned desc, pl.learners desc;
+end $$;
+
+-- Самые «популярные» слова: по числу ответов всех пользователей.
+create or replace function admin_popular_words(p_limit int default 20)
+returns table (item_id uuid, source_text text, target_text text, language_code text, learners bigint, answers bigint, correct bigint)
+language plpgsql security definer set search_path = public as $$
+begin
+  perform require_admin();
+  return query
+    select vi.id, vi.source_text, vi.target_text, sl.code,
+           count(distinct wp.student_id),
+           coalesce(sum(wp.correct_answers + wp.wrong_answers), 0)::bigint,
+           coalesce(sum(wp.correct_answers), 0)::bigint
+    from word_progress wp
+    join vocabulary_items vi on vi.id = wp.vocabulary_item_id
+    join languages sl on sl.id = vi.source_language_id
+    group by vi.id, vi.source_text, vi.target_text, sl.code
+    order by 6 desc, 5 desc, vi.source_text
+    limit greatest(1, least(coalesce(p_limit, 20), 100));
+end $$;
+
+-- Учителя: ученики, группы, наборы, задания и успехи их учеников.
+create or replace function admin_teachers()
+returns table (teacher_id uuid, name text, students bigint, groups bigint, sets bigint, assignments bigint,
+               learned bigint, correct bigint, wrong bigint, active_students_7d bigint, last_active timestamptz)
+language plpgsql security definer set search_path = public as $$
+begin
+  perform require_admin();
+  return query
+    select p.id, p.name,
+           (select count(*) from teacher_students ts where ts.teacher_id = p.id),
+           (select count(*) from groups g where g.teacher_id = p.id),
+           (select count(*) from word_sets s where s.owner_id = p.id and s.source = 'teacher'),
+           (select count(*) from assignments a where a.assigned_by = p.id and a.source = 'teacher'),
+           (select count(*) from word_progress wp join teacher_students ts on ts.student_id = wp.student_id
+              where ts.teacher_id = p.id and wp.status = 'learned'),
+           (select coalesce(sum(wp.correct_answers), 0) from word_progress wp join teacher_students ts on ts.student_id = wp.student_id
+              where ts.teacher_id = p.id)::bigint,
+           (select coalesce(sum(wp.wrong_answers), 0) from word_progress wp join teacher_students ts on ts.student_id = wp.student_id
+              where ts.teacher_id = p.id)::bigint,
+           (select count(distinct h.student_id) from review_history h join teacher_students ts on ts.student_id = h.student_id
+              where ts.teacher_id = p.id and h.created_at >= now() - interval '7 days'),
+           (select max(h.created_at) from review_history h join teacher_students ts on ts.student_id = h.student_id
+              where ts.teacher_id = p.id)
+    from profiles p
+    where exists (select 1 from user_roles r where r.user_id = p.id and r.role = 'teacher')
+    order by 7 desc, 3 desc, p.name;
+end $$;
+
 revoke execute on function grant_admin(text) from public, anon, authenticated;
 revoke execute on function require_admin(), admin_overview(), admin_top_learners(int),
-  admin_list_users(), admin_delete_user(uuid) from public, anon;
-grant execute on function admin_overview(), admin_top_learners(int), admin_list_users(), admin_delete_user(uuid)
+  admin_list_users(), admin_delete_user(uuid), admin_activity(int), admin_signups(int),
+  admin_learned_distribution(), admin_language_stats(), admin_popular_words(int), admin_teachers()
+  from public, anon;
+grant execute on function admin_overview(), admin_top_learners(int), admin_list_users(), admin_delete_user(uuid),
+  admin_activity(int), admin_signups(int), admin_learned_distribution(), admin_language_stats(),
+  admin_popular_words(int), admin_teachers()
   to authenticated;
+
+-- Можно ли пользователю создавать личные наборы и слова (запрет ставит родитель; по умолчанию — можно).
+create or replace function personal_words_allowed(p_user uuid)
+returns boolean language sql security definer stable set search_path = public as $$
+  select coalesce((select allow_personal_words from user_settings where user_id = p_user), true);
+$$;
 
 -- ---------- Профиль: что ребёнок меняет сам, а что — только родитель -------------
 -- Пока у пользователя есть родитель, он «управляемый». Сам он может: имя, число слов в тренировке,

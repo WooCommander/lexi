@@ -55,6 +55,7 @@ const demoAccounts = [
   { role: UserRole.Student, email: 'demo.student@example.com' },
   { role: UserRole.Teacher, email: 'demo.teacher@example.com' },
   { role: UserRole.Parent, email: 'demo.parent@example.com' },
+  { role: UserRole.Admin, email: 'demo.admin@example.com' },
 ]
 
 const demoLogin = async (account: (typeof demoAccounts)[number]) => {

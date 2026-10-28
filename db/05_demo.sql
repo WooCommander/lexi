@@ -6,6 +6,7 @@
 --    demo.teacher@example.com  — учитель «Анна Петровна» (группа 6А, наборы, задания)
 --    demo.student@example.com  — ученик «Алексей» (есть прогресс и сложные слова)
 --    demo.parent@example.com   — родитель «Мама Алексея»
+--    demo.admin@example.com    — администратор (дашборд, пользователи, все права)
 -- =====================================================================
 
 -- pgcrypto в Supabase лежит в схеме extensions, в чистом Postgres — в public
@@ -16,6 +17,7 @@ declare
   v_teacher uuid := 'd0000000-0000-4000-8000-000000000001';
   v_student uuid := 'd0000000-0000-4000-8000-000000000002';
   v_parent  uuid := 'd0000000-0000-4000-8000-000000000003';
+  v_admin   uuid := 'd0000000-0000-4000-8000-000000000004';
   v_en uuid := (select id from languages where code = 'en');
   v_ru uuid := (select id from languages where code = 'ru');
   v_ro uuid := (select id from languages where code = 'ro');
@@ -32,15 +34,22 @@ begin
   if v_en is null or v_ru is null or v_ro is null then
     raise exception 'Сначала выполните 04_seed.sql (языки en/ru/ro)';
   end if;
+  -- роль admin появилась в 01_schema.sql / 02_functions.sql: на старой схеме демо-админ создаться не может
+  if not exists (select 1 from pg_constraint where conname = 'user_roles_role_check'
+                 and pg_get_constraintdef(oid) like '%admin%')
+     or not exists (select 1 from pg_proc where proname = 'grant_admin') then
+    raise exception 'Схема устарела: заново выполните 01_schema.sql, 02_functions.sql и 03_rls.sql (они повторно запускаемые), затем этот скрипт';
+  end if;
 
   -- пересоздаём демо-пользователей (каскадом удалятся профили и все их данные)
-  delete from auth.users where id in (v_teacher, v_student, v_parent);
+  delete from auth.users where id in (v_teacher, v_student, v_parent, v_admin);
 
   for u in
     select * from (values
       (v_teacher, 'demo.teacher@example.com', '{"name":"Анна Петровна","roles":["teacher"]}'::jsonb),
       (v_student, 'demo.student@example.com', '{"name":"Алексей","roles":["student"]}'::jsonb),
-      (v_parent,  'demo.parent@example.com',  '{"name":"Мама Алексея","roles":["parent"]}'::jsonb)
+      (v_parent,  'demo.parent@example.com',  '{"name":"Мама Алексея","roles":["parent"]}'::jsonb),
+      (v_admin,   'demo.admin@example.com',   '{"name":"Администратор","roles":["student"]}'::jsonb)
     ) as t(id, email, meta)
   loop
     insert into auth.users (
@@ -59,6 +68,8 @@ begin
             'email', now(), now(), now());
   end loop;
   -- профили, роли и настройки создал триггер handle_new_user
+  -- роль администратора через регистрацию получить нельзя — выдаём напрямую (скрипт идёт от владельца БД)
+  insert into user_roles (user_id, role) values (v_admin, 'admin') on conflict do nothing;
 
   -- ---------- Наборы учителя ----------
   insert into word_sets (id, name, description, source_language_id, target_language_id, owner_id, source)

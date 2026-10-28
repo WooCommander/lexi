@@ -10,6 +10,7 @@ import {
     UsersRound,
     Baby,
     School,
+    ShieldCheck,
 } from 'lucide-vue-next'
 import { UserRole } from '@/modules/auth/domain/User'
 
@@ -48,12 +49,19 @@ export const NAV_BY_ROLE: Record<UserRole, NavItem[]> = {
         { label: 'Статистика', path: '/teacher/stats', icon: BarChart3 },
         { label: 'Профиль', path: '/settings', icon: Settings },
     ],
+    [UserRole.Admin]: [
+        { label: 'Дашборд', path: '/admin', icon: LayoutDashboard, mobile: true },
+        { label: 'Пользователи', path: '/admin/users', icon: ShieldCheck, mobile: true },
+        { label: 'Языки', path: '/languages', icon: Languages, mobile: true },
+        { label: 'Профиль', path: '/settings', icon: Settings, mobile: true },
+    ],
 }
 
 export const HOME_BY_ROLE: Record<UserRole, string> = {
     [UserRole.Student]: '/learn',
     [UserRole.Parent]: '/students',
     [UserRole.Teacher]: '/teacher',
+    [UserRole.Admin]: '/admin',
 }
 
 /** Активен ли пункт для текущего пути (вложенные экраны подсвечивают родителя). */

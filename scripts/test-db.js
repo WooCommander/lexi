@@ -106,6 +106,8 @@ const main = async () => {
       ['Схема (первый запуск)', SCHEMA_FILES],
       ['Схема (повторный запуск — идемпотентность)', SCHEMA_FILES],
       ['Тесты', TEST_FILES.filter(f => !f.endsWith('00_supabase_shim.sql'))],
+      // демо-аккаунты (в том числе админ) должны создаваться на актуальной схеме
+      ['Демо-данные', [join(root, 'db', '05_demo.sql'), join(root, 'db', 'tests', 'demo', 'check.sql')]],
     ]
     for (const [title, files] of steps) {
       console.log(`▸ ${title}`)

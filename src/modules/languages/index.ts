@@ -6,6 +6,6 @@ export const languageRoutes: RouteRecordRaw[] = [
         path: '/languages',
         name: 'Languages',
         component: () => import('./ui/LanguagesView.vue'),
-        meta: { roles: [UserRole.Teacher, UserRole.Parent] },
+        meta: { roles: [UserRole.Teacher, UserRole.Parent, UserRole.Admin] },
     },
 ]

@@ -9,7 +9,7 @@
 begin;
 
 insert into test.ids (name) values
-  ('T1'), ('T2'), ('S1'), ('S2'), ('S3'), ('S5'), ('P'), ('P2'),
+  ('T1'), ('T2'), ('S1'), ('S2'), ('S3'), ('S5'), ('P'), ('P2'), ('ADM'), ('ADM2'), ('HACK'),
   ('G1'), ('G2'), ('SET1'), ('SET2'), ('SETS2'), ('V1'), ('V2'), ('V3'), ('A1'),
   ('SETP'), ('AP');
 
@@ -24,8 +24,16 @@ from (values
   ('S3', '{"name": "Ученик 3"}'),
   ('S5', '{"name": "Ученик 5", "roles": ["student", "hacker"]}'),
   ('P',  '{"name": "Родитель", "roles": ["parent"]}'),
-  ('P2', '{"name": "Родитель 2", "roles": ["parent"]}')
+  ('P2', '{"name": "Родитель 2", "roles": ["parent"]}'),
+  ('ADM',  '{"name": "Админ", "roles": ["admin", "teacher"]}'),
+  ('ADM2', '{"name": "Админ 2", "roles": ["admin"]}'),
+  ('HACK', '{"name": "Хакер", "roles": ["admin"]}')
 ) as u(name, meta);
+
+-- Администраторов назначают вручную (в регистрации роль admin игнорируется — это проверяют тесты).
+select grant_admin('adm@test.local');
+select grant_admin('adm2@test.local');
+update auth.users set last_sign_in_at = now() where id = test.id('T1');
 
 -- Данные, которые создают сами владельцы (в обход RLS — это подготовка стенда).
 insert into groups (id, teacher_id, name) values

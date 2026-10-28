@@ -2,6 +2,8 @@ export enum UserRole {
     Student = 'student',
     Parent = 'parent',
     Teacher = 'teacher',
+    /** Назначается только вручную (SQL grant_admin или другим администратором), выбрать при регистрации нельзя. */
+    Admin = 'admin',
 }
 
 export interface Profile {
@@ -19,9 +21,13 @@ export const ROLE_LABELS: Record<UserRole, string> = {
     [UserRole.Student]: 'Ученик',
     [UserRole.Parent]: 'Родитель',
     [UserRole.Teacher]: 'Учитель',
+    [UserRole.Admin]: 'Администратор',
 }
 
-export const ALL_ROLES: UserRole[] = [UserRole.Student, UserRole.Parent, UserRole.Teacher]
+/** Роли, которые пользователь выбирает себе сам (регистрация, профиль). */
+export const SELF_ROLES: UserRole[] = [UserRole.Student, UserRole.Parent, UserRole.Teacher]
+
+export const ALL_ROLES: UserRole[] = [...SELF_ROLES, UserRole.Admin]
 
 export const isUserRole = (value: unknown): value is UserRole =>
     typeof value === 'string' && (ALL_ROLES as string[]).includes(value)

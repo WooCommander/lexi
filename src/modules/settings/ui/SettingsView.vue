@@ -4,7 +4,7 @@ import { useRouter } from 'vue-router'
 import { ChevronRight, KeyRound, LogOut, Moon, RefreshCw, Sun } from 'lucide-vue-next'
 import { LxButton, LxCard, LxCheckbox, LxInput, LxPageHeader, LxSegmented, LxSelect } from '@/design-system'
 import { useAuthStore } from '@/modules/auth/state/useAuthStore'
-import { ALL_ROLES, ROLE_LABELS, UserRole } from '@/modules/auth/domain/User'
+import { ROLE_LABELS, SELF_ROLES, UserRole } from '@/modules/auth/domain/User'
 import { useSettingsStore } from '../state/useSettingsStore'
 import { DAILY_GOALS } from '../domain/UserSettings'
 import { useLanguagesStore } from '@/modules/languages/state/useLanguagesStore'
@@ -14,6 +14,7 @@ import { useTheme } from '@/shared/composables/useTheme'
 import { useUpdateStore } from '@/modules/updates/state/useUpdateStore'
 import { useNotify } from '@/shared/composables/useNotify'
 import { errorMessage } from '@/shared/lib/errors'
+import { LinkService } from '@/modules/students/services/LinkService'
 import { useSpeech } from '@/shared/composables/useSpeech'
 
 const router = useRouter()
@@ -27,6 +28,11 @@ const { notify } = useNotify()
 const speech = useSpeech()
 
 const name = ref(auth.displayName)
+/** У ребёнка с родителем цели, родной язык, роли и личные слова задаёт родитель (то же правило есть в БД). */
+const isManaged = ref(false)
+const managedKnown = ref(false)
+/** Пока не знаем, есть ли родитель, управляемые поля закрыты — чтобы их нельзя было «на секунду» изменить. */
+const locked = computed(() => isManaged.value || (isStudent.value && !managedKnown.value))
 const isStudent = computed(() => auth.hasRole(UserRole.Student))
 const goalOptions = DAILY_GOALS.map(n => ({ value: n as number, label: String(n) }))
 const sizeOptions = SESSION_SIZES.map(n => ({ value: n as number, label: String(n) }))
@@ -37,6 +43,13 @@ const studiedLanguages = computed(() => study.languageSummaries.map(s => s.langu
 onMounted(async () => {
   await Promise.all([languages.load(), store.load()])
   if (isStudent.value) await study.load()
+  try {
+    isManaged.value = !!auth.userId && (await LinkService.hasParent(auth.userId))
+  } catch {
+    isManaged.value = false
+  } finally {
+    managedKnown.value = true
+  }
 })
 
 watch(() => auth.displayName, v => (name.value = v))
@@ -93,17 +106,19 @@ const logout = async () => {
       </form>
       <div>
         <div class="lx-field__label">Роли</div>
-        <LxCheckbox v-for="r in ALL_ROLES" :key="r" :model-value="auth.hasRole(r)"
-          :disabled="auth.hasRole(r) && auth.roles.length === 1" @update:model-value="v => toggleRole(r, v)">
+        <LxCheckbox v-for="r in SELF_ROLES" :key="r" :model-value="auth.hasRole(r)"
+          :disabled="locked || (auth.hasRole(r) && auth.roles.length === 1)" @update:model-value="v => toggleRole(r, v)">
           {{ ROLE_LABELS[r] }}
         </LxCheckbox>
+        <p v-if="isManaged" class="caption">Роли меняет родитель.</p>
       </div>
     </LxCard>
 
     <LxCard v-if="store.settings" class="stack">
       <h2 class="section-title">Обучение</h2>
       <LxSelect :model-value="store.settings.nativeLanguageId" :options="languages.options" label="Мой родной язык"
-        @update:model-value="v => save({ nativeLanguageId: v ? String(v) : null })" />
+        :disabled="locked" @update:model-value="v => save({ nativeLanguageId: v ? String(v) : null })" />
+      <p v-if="isManaged" class="caption">Родной язык, цели и доступные языки задаёт родитель.</p>
       <p class="caption">По нему определяется изучаемый язык: «English → Русский» и «Русский → English» — это английский.</p>
 
       <LxCheckbox v-if="speech.isSupported" v-model="speech.autoSpeak.value">
@@ -111,12 +126,16 @@ const logout = async () => {
       </LxCheckbox>
 
       <template v-if="isStudent">
-        <LxSegmented :model-value="store.settings.dailyGoal" :options="goalOptions" label="Дневная цель (слов)"
+        <div v-if="locked">
+          <div class="lx-field__label">Дневная цель</div>
+          <p>{{ store.settings.dailyGoal }} слов<template v-if="isManaged"> — её задаёт родитель</template></p>
+        </div>
+        <LxSegmented v-else :model-value="store.settings.dailyGoal" :options="goalOptions" label="Дневная цель (слов)"
           @update:model-value="v => save({ dailyGoal: v })" />
         <LxSegmented :model-value="store.settings.sessionSize" :options="sizeOptions" label="Слов в тренировке по умолчанию"
           @update:model-value="v => save({ sessionSize: v })" />
 
-        <div v-if="studiedLanguages.length" class="stack">
+        <div v-if="studiedLanguages.length && !locked" class="stack">
           <div class="lx-field__label">Цель по языкам (пусто — общая)</div>
           <div v-for="id in studiedLanguages" :key="id" class="goal-row">
             <span>{{ languages.flag(id) }} {{ languages.label(id) }}</span>

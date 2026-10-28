@@ -39,6 +39,16 @@ export class LinkService {
             .map(profileFromRow)
     }
 
+    /** Есть ли у пользователя родитель: такой профиль «управляемый» — часть настроек меняет только родитель. */
+    static async hasParent(studentId: string): Promise<boolean> {
+        const { count, error } = await supabase
+            .from('parent_students')
+            .select('parent_id', { count: 'exact', head: true })
+            .eq('student_id', studentId)
+        if (error) throw error
+        return (count ?? 0) > 0
+    }
+
     static async unlink(kind: LinkKind, ownerId: string, studentId: string): Promise<void> {
         const { table, ownerColumn } = TABLE[kind]
         const { error } = await supabase.from(table).delete().eq(ownerColumn, ownerId).eq('student_id', studentId)

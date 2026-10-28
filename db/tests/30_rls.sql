@@ -99,9 +99,12 @@ select test.throws('S1: результат «сомневаюсь» допуст
 select test.affects('S1: результат «сомневаюсь» сохраняется',
   format('insert into review_history (vocabulary_item_id, direction, result) values (%L, ''reverse'', ''unsure'')', test.id('V1')), 1);
 
-select test.affects('S1: может создать личный набор',
+select test.throws('S1 (родитель запретил личные слова): не создаёт личный набор через API',
   $$insert into word_sets (name, source_language_id, target_language_id)
-    select 'Мой', a.id, b.id from languages a, languages b where a.code = 'en' and b.code = 'ru'$$, 1);
+    select 'Мой', a.id, b.id from languages a, languages b where a.code = 'en' and b.code = 'ru'$$);
+select test.throws('S1 (личные слова запрещены): не создаёт слова',
+  $$insert into vocabulary_items (source_language_id, target_language_id, source_text, target_text)
+    select a.id, b.id, 'cow', 'корова' from languages a, languages b where a.code = 'en' and b.code = 'ru'$$);
 select test.throws('S1: не может создать набор от чужого имени',
   format($f$insert into word_sets (name, source_language_id, target_language_id, owner_id)
     select 'Подмена', a.id, b.id, %L from languages a, languages b where a.code = 'en' and b.code = 'ru'$f$, test.id('T1')));
@@ -109,7 +112,19 @@ select test.throws('S1: нельзя создать язык (не учител�
   $$insert into languages (code, name) values ('de', 'Deutsch')$$);
 
 -- настройки: свои можно, чужие — нет, ограничения родителя — не снять
-select test.affects('S1: меняет свою дневную цель', $$update user_settings set daily_goal = 15$$, 1);
+select test.throws('S1 (с родителем): не меняет дневную цель сам', $$update user_settings set daily_goal = 15$$);
+select test.throws('S1 (с родителем): не меняет цели по языкам', $$update user_settings set language_goals = '{"x": 5}'::jsonb$$);
+select test.throws('S1 (с родителем): не меняет родной язык', $$update user_settings set native_language_id = null$$);
+select test.affects('S1: меняет число слов в тренировке', $$update user_settings set session_size = 20$$, 1);
+select test.affects('S1: меняет своё имя', $$update profiles set name = 'Лёша' where id = auth.uid()$$, 1);
+select test.affects('S1: не меняет чужое имя',
+  format('update profiles set name = ''x'' where id = %L', test.id('T1')), 0);
+select test.throws('S1 (с родителем): не добавляет себе роль учителя',
+  $$insert into user_roles (user_id, role) values (auth.uid(), 'teacher')$$);
+select test.throws('S1: не выдаёт себе роль администратора',
+  $$insert into user_roles (user_id, role) values (auth.uid(), 'admin')$$);
+select test.affects('S1 (с родителем): не снимает с себя роль ученика',
+  $$delete from user_roles where user_id = auth.uid() and role = 'student'$$, 0);
 select test.affects('S1: не меняет настройки одногруппника',
   format('update user_settings set daily_goal = 99 where user_id = %L', test.id('S5')), 0);
 select test.throws('S1: не может вернуть личные слова, запрещённые родителем',
@@ -117,7 +132,7 @@ select test.throws('S1: не может вернуть личные слова, 
 select test.throws('S1: не может расширить список языков, заданный родителем',
   $$update user_settings set allowed_language_ids = null$$);
 select test.affects('S1: сохранение без изменения ограничений проходит (upsert из приложения)',
-  $$update user_settings set allow_personal_words = allow_personal_words, daily_goal = 12$$, 1);
+  $$update user_settings set allow_personal_words = allow_personal_words, daily_goal = daily_goal, session_size = 12$$, 1);
 
 -- ---------- Учитель T1 ----------
 select test.login('T1');
@@ -162,6 +177,24 @@ select test.affects('T1: не может править сид-язык',
 select test.affects('T1: может редактировать свой набор',
   format('update word_sets set description = ''ok'' where id = %L', test.id('SET1')), 1);
 
+-- ---------- Пользователь без родителя (взрослый) свободен в своём профиле ----------
+select test.login('S2');
+select test.affects('S2 (без родителя): меняет дневную цель', $$update user_settings set daily_goal = 20$$, 1);
+select test.affects('S2 (без родителя): меняет родной язык', $$update user_settings set native_language_id = null$$, 1);
+select test.affects('S2 (без родителя): добавляет себе роль учителя',
+  $$insert into user_roles (user_id, role) values (auth.uid(), 'teacher')$$, 1);
+select test.affects('S2 (без родителя): снимает роль учителя', $$delete from user_roles where role = 'teacher' and user_id = auth.uid()$$, 1);
+select test.affects('S2: создаёт личный набор из готового',
+  $$insert into word_sets (name, source_language_id, target_language_id)
+    select 'Мой набор', a.id, b.id from languages a, languages b where a.code = 'en' and b.code = 'ru'$$, 1);
+select test.affects('S2: добавляет свои слова',
+  $$insert into vocabulary_items (source_language_id, target_language_id, source_text, target_text)
+    select a.id, b.id, 'cow', 'корова' from languages a, languages b where a.code = 'en' and b.code = 'ru'$$, 1);
+select test.affects('S2: не меняет чужое слово', format('update vocabulary_items set target_text = ''x'' where id = %L', test.id('V1')), 0);
+select test.affects('S2: не удаляет чужое слово', format('delete from vocabulary_items where id = %L', test.id('V1')), 0);
+select test.throws('S2: даже без родителя админом себя не назначит',
+  $$insert into user_roles (user_id, role) values (auth.uid(), 'admin')$$);
+
 -- ---------- Другой учитель T2 ----------
 select test.login('T2');
 select test.rows('T2: не видит набор T1', format('select 1 from word_sets where id = %L', test.id('SET1')), 0);
@@ -186,7 +219,14 @@ select test.rows('P: не видит профиль учителя ребёнк�
   format('select 1 from profiles where id = %L', test.id('T1')), 0);
 select test.rows('P: не видит профиль чужого ученика', format('select 1 from profiles where id = %L', test.id('S2')), 0);
 select test.rows('P: видит связь учителя с ребёнком', format('select 1 from teacher_students where student_id = %L', test.id('S1')), 1);
-select test.throws('P: не может писать прогресс за ребёнка',
+select test.rows('P читает набор учителя ребёнка', format('select 1 from word_sets where id = %L', test.id('SET1')), 1);
+select test.affects('P: не переименовывает набор учителя', format('update word_sets set name = ''x'' where id = %L', test.id('SET1')), 0);
+select test.affects('P: не удаляет набор учителя', format('delete from word_sets where id = %L', test.id('SET1')), 0);
+select test.affects('P: не правит слово учителя', format('update vocabulary_items set target_text = ''x'' where id = %L', test.id('V1')), 0);
+select test.affects('P: не удаляет слово учителя', format('delete from vocabulary_items where id = %L', test.id('V1')), 0);
+select test.throws('P: не добавляет слова в набор учителя',
+  format('insert into word_set_items (word_set_id, vocabulary_item_id) values (%L, %L)', test.id('SET1'), test.id('V1')));
+select test.throws('P: не пишет прогресс за ребёнка',
   format('insert into word_progress (student_id, vocabulary_item_id) values (%L, %L)', test.id('S1'), test.id('V1')));
 select test.affects('P: меняет дневную цель ребёнка', format('update user_settings set daily_goal = 20 where user_id = %L', test.id('S1')), 1);
 select test.affects('P: не меняет настройки чужого ребёнка', format('update user_settings set daily_goal = 20 where user_id = %L', test.id('S2')), 0);
@@ -212,8 +252,9 @@ select test.affects('P2: не меняет настройки чужого ре�
 
 -- ---------- Разрыв связей ----------
 select test.login('S1');
-select test.affects('S1: может отключиться от родителя', $$delete from parent_students$$, 1);
+select test.affects('S1: не может сам отключиться от родителя', $$delete from parent_students$$, 0);
 select test.login('P');
+select test.affects('P: может отключить ребёнка', format('delete from parent_students where student_id = %L', test.id('S1')), 1);
 select test.rows('P после отключения: прогресс ребёнка закрыт', format('select 1 from word_progress where student_id = %L', test.id('S1')), 0);
 select test.rows('P после отключения: ребёнок не виден', format('select 1 from profiles where id = %L', test.id('S1')), 0);
 

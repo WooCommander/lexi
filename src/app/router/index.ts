@@ -8,6 +8,7 @@ import { groupRoutes } from '@/modules/groups'
 import { assignmentRoutes } from '@/modules/assignments'
 import { teacherRoutes } from '@/modules/teachers'
 import { languageRoutes } from '@/modules/languages'
+import { adminRoutes } from '@/modules/admin'
 import { settingsRoutes } from '@/modules/settings'
 import { updateRoutes } from '@/modules/updates'
 import { useAuthStore } from '@/modules/auth/state/useAuthStore'
@@ -27,6 +28,7 @@ const router = createRouter({
         ...assignmentRoutes,
         ...teacherRoutes,
         ...languageRoutes,
+        ...adminRoutes,
         ...settingsRoutes,
         ...updateRoutes,
         { path: '/:pathMatch(.*)*', redirect: '/' },

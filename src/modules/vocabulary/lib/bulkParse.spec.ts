@@ -18,6 +18,12 @@ describe('parseBulkWords', () => {
         expect(items[1]).toMatchObject({ sourceText: 'câine', targetText: 'собака', sourceTranscription: '[ˈkɨne]' })
     })
 
+    it('takes the fourth column as how the word is read in Russian letters', () => {
+        const { items } = parseBulkWords('apple;яблоко;/ˈæp.əl/;эпл\ncat;кошка;;кэт')
+        expect(items[0]).toMatchObject({ sourceTranscription: '/ˈæp.əl/', sourceReading: 'эпл' })
+        expect(items[1]).toMatchObject({ sourceTranscription: undefined, sourceReading: 'кэт' })
+    })
+
     it('keeps hyphens inside words', () => {
         const { items } = parseBulkWords('well-known - известный')
         expect(items[0]).toMatchObject({ sourceText: 'well-known', targetText: 'известный' })

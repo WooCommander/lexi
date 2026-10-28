@@ -10,7 +10,8 @@
 
 1. Создайте проект в Supabase и выполните в **SQL Editor** по порядку:
    `db/01_schema.sql` → `db/02_functions.sql` → `db/03_rls.sql` → `db/04_seed.sql`.
-   Скрипты можно запускать повторно.
+   Скрипты можно запускать повторно. После обновления репозитория перезапустите `db/02_functions.sql` в боевом проекте
+   (защита ограничений родителя, права на коды приглашения).
 2. `cp .env.example .env` и укажите `VITE_SUPABASE_URL`, `VITE_SUPABASE_ANON_KEY`.
 3. В Supabase → Authentication → URL Configuration добавьте `http://localhost:5173/login`
    в Redirect URLs (подтверждение почты и восстановление пароля).
@@ -19,7 +20,8 @@
 ```bash
 npm install
 npm run dev        # http://localhost:5173
-npm test           # юнит-тесты ядра (vitest)
+npm test           # юнит-тесты (vitest)
+npm run test:db    # схема БД и RLS на временном PostgreSQL (нужен установленный Postgres)
 npm run build      # проверка типов + сборка PWA
 ```
 
@@ -57,13 +59,20 @@ npm run build      # проверка типов + сборка PWA
 SUPABASE_SERVICE_ROLE_KEY=eyJ...
 ```
 
+### Подпись APK
+
+Самообновление работает, только если каждая версия подписана **одним и тем же ключом**. Один раз выполните
+`npm run android:keystore` — создаст `android/lexi-release.jks` и `android/keystore.properties` (оба в `.gitignore`).
+**Сразу сделайте копию обоих файлов**: потеряв ключ, вы не сможете обновлять установленные приложения.
+Версии, ранее установленные из debug-APK, при первом переходе на release-подпись нужно удалить и поставить заново.
+
 ### Выпуск новой версии
 
 1. Поднимите версию: `npm version patch --no-git-tag-version` (или `minor` / `major`).
 2. Добавьте запись в `src/modules/updates/changelog.ts` — из неё берётся текст «Что нового».
 3. `npm run release`, команда делает всё по шагам:
    - `build` → `cap sync android` → `sync-android-version` (versionCode = 1.2.3 → 10203)
-   - `build-debug-apk` (`android/app/build/outputs/apk/debug/app-debug.apk`)
+   - `build-release-apk` (`android/app/build/outputs/apk/release/app-release.apk`, подписанный)
    - `upload-release` → bucket `releases`: `lexi-<версия>.apk`, `app-latest.apk`, затем `version.json`
 
 Приложение при запуске и при возврате на экран читает `version.json`. Если версия новее —

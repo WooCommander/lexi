@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { computed } from 'vue'
 import { Star } from 'lucide-vue-next'
+import { LxSpeakButton } from '@/design-system'
 import { TrainingDirection, type TrainingCard } from '../../domain/Training'
 import { useLanguagesStore } from '@/modules/languages/state/useLanguagesStore'
 
@@ -29,6 +30,8 @@ const side = computed(() => {
     // транскрипция всегда относится к своему языку
     promptTranscription: forward ? item.sourceTranscription : item.targetTranscription,
     answerTranscription: forward ? item.targetTranscription : item.sourceTranscription,
+    promptReading: forward ? item.sourceReading : item.targetReading,
+    answerReading: forward ? item.targetReading : item.sourceReading,
     example: forward ? item.exampleSource : item.exampleTarget,
     exampleTranslation: forward ? item.exampleTarget : item.exampleSource,
   }
@@ -46,6 +49,7 @@ const langCode = (id: string) => languages.get(id)?.code
         <span class="flashcard__lang">{{ languages.flag(side.promptLang) }} {{ languages.label(side.promptLang) }}</span>
         <span v-if="retry" class="flashcard__retry">ещё раз</span>
         <span class="flashcard__word" :lang="langCode(side.promptLang)">{{ side.prompt }}</span>
+        <span v-if="side.promptReading" class="flashcard__reading">«{{ side.promptReading }}»</span>
         <span class="flashcard__hint">Вспомните перевод и нажмите, чтобы проверить</span>
       </button>
 
@@ -54,6 +58,7 @@ const langCode = (id: string) => languages.get(id)?.code
         <span class="flashcard__lang">{{ languages.flag(side.answerLang) }} {{ languages.label(side.answerLang) }}</span>
         <span class="flashcard__prompt-small" :lang="langCode(side.promptLang)">{{ side.prompt }}</span>
         <span class="flashcard__word flashcard__word--answer" :lang="langCode(side.answerLang)">{{ side.answer }}</span>
+        <span v-if="side.answerReading" class="flashcard__reading">«{{ side.answerReading }}»</span>
         <span v-if="side.answerTranscription || side.promptTranscription" class="flashcard__transcription">
           {{ side.answerTranscription || side.promptTranscription }}
         </span>
@@ -63,6 +68,9 @@ const langCode = (id: string) => languages.get(id)?.code
         </span>
       </div>
     </div>
+
+    <LxSpeakButton class="flashcard__speak" :text="revealed ? side.answer : side.prompt"
+      :lang="langCode(revealed ? side.answerLang : side.promptLang)" />
 
     <button type="button" class="flashcard__star" :class="{ active: favorite }"
       :aria-label="favorite ? 'Убрать из избранного' : 'В избранное'" @click.stop="emit('toggle-favorite')">
@@ -170,6 +178,12 @@ const langCode = (id: string) => languages.get(id)?.code
     color: var(--color-text-tertiary);
   }
 
+  &__reading {
+    font-size: var(--text-h3);
+    font-weight: 700;
+    color: var(--color-text-secondary);
+  }
+
   &__transcription {
     font-size: var(--text-h3);
     color: var(--color-text-secondary);
@@ -182,6 +196,13 @@ const langCode = (id: string) => languages.get(id)?.code
     margin-top: var(--space-3);
     font-size: var(--text-small);
     font-style: italic;
+  }
+
+  &__speak {
+    position: absolute;
+    right: 10px;
+    bottom: 10px;
+    z-index: 2;
   }
 
   &__star {

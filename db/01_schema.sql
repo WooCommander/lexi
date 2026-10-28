@@ -91,6 +91,8 @@ create table if not exists vocabulary_items (
   target_text           text not null,
   source_transcription  text,
   target_transcription  text,
+  source_reading        text,                 -- как читается буквами родного языка: «эпл»
+  target_reading        text,
   example_source        text,
   example_target        text,
   created_by            uuid not null references profiles on delete cascade default auth.uid(),
@@ -195,6 +197,10 @@ create table if not exists user_settings (
   allow_personal_words  boolean not null default true,
   updated_at            timestamptz not null default now()
 );
+
+-- Для баз, созданных до появления «как читается».
+alter table vocabulary_items add column if not exists source_reading text;
+alter table vocabulary_items add column if not exists target_reading text;
 
 -- ---------- Индексы --------------------------------------------------
 

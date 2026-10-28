@@ -1,5 +1,14 @@
 apply plugin: 'com.android.application'
 
+// Release-подпись: android/keystore.properties (не коммитится). Создаётся `npm run android:keystore`.
+// Ключ должен быть один на всё время жизни приложения — иначе самообновление APK перестанет работать.
+def keystoreProps = new Properties()
+def keystorePropsFile = rootProject.file('keystore.properties')
+if (keystorePropsFile.exists()) {
+    keystorePropsFile.withInputStream { keystoreProps.load(it) }
+}
+def hasReleaseKey = keystoreProps['storeFile'] != null
+
 android {
     namespace = "com.lexi.app"
     compileSdk = rootProject.ext.compileSdkVersion
@@ -7,8 +16,8 @@ android {
         applicationId "com.lexi.app"
         minSdkVersion rootProject.ext.minSdkVersion
         targetSdkVersion rootProject.ext.targetSdkVersion
-        versionCode 10001
-        versionName "1.0.1"
+        versionCode 10100
+        versionName "1.1.0"
         testInstrumentationRunner "androidx.test.runner.AndroidJUnitRunner"
         aaptOptions {
              // Files and dirs to omit from the packaged assets dir, modified to accommodate modern web apps.
@@ -16,11 +25,29 @@ android {
             ignoreAssetsPattern = '!.svn:!.git:!.ds_store:!*.scc:.*:!CVS:!thumbs.db:!picasa.ini:!*~'
         }
     }
+    signingConfigs {
+        if (hasReleaseKey) {
+            release {
+                storeFile rootProject.file(keystoreProps['storeFile'])
+                storePassword keystoreProps['storePassword']
+                keyAlias keystoreProps['keyAlias']
+                keyPassword keystoreProps['keyPassword']
+            }
+        }
+    }
     buildTypes {
         release {
+            if (hasReleaseKey) signingConfig signingConfigs.release
             minifyEnabled false
             proguardFiles getDefaultProguardFile('proguard-android.txt'), 'proguard-rules.pro'
         }
+    }
+}
+
+// Неподписанный release-APK Android не установит — лучше упасть сразу с понятным сообщением.
+gradle.taskGraph.whenReady { graph ->
+    if (!hasReleaseKey && graph.allTasks.any { it.path == ':app:assembleRelease' }) {
+        throw new GradleException('Нет android/keystore.properties. Создайте ключ: npm run android:keystore')
     }
 }
 

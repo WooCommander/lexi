@@ -5,7 +5,15 @@ import { Play, Star, TriangleAlert, Lock } from 'lucide-vue-next'
 import { LxButton, LxCard, LxPageHeader, LxProgressBar, LxSegmented, LxSpinner, LxStatTile } from '@/design-system'
 import { useStudyStore } from '../state/useStudyStore'
 import { useTrainingSession } from '../state/useTrainingSession'
-import { SESSION_SIZES, TRAINING_MODE_LABELS, TrainingDirection, type TrainingMode } from '../domain/Training'
+import {
+  EXERCISE_HINTS,
+  EXERCISE_LABELS,
+  SESSION_SIZES,
+  TRAINING_MODE_LABELS,
+  TrainingDirection,
+  type ExerciseType,
+  type TrainingMode,
+} from '../domain/Training'
 import { useSettingsStore } from '@/modules/settings/state/useSettingsStore'
 import { useLanguagesStore } from '@/modules/languages/state/useLanguagesStore'
 import { useNotify } from '@/shared/composables/useNotify'
@@ -29,6 +37,12 @@ const favoriteIds = computed(() =>
 
 const size = ref<number>(10)
 const mode = ref<TrainingMode>('mixed')
+const exercise = ref<ExerciseType>('cards')
+
+const exerciseOptions = (Object.keys(EXERCISE_LABELS) as ExerciseType[]).map(e => ({
+  value: e,
+  label: EXERCISE_LABELS[e],
+}))
 
 const sizeOptions = SESSION_SIZES.map(n => ({ value: n as number, label: String(n) }))
 const modeOptions = (['mixed', TrainingDirection.Forward, TrainingDirection.Reverse] as TrainingMode[]).map(m => ({
@@ -58,6 +72,7 @@ const start = (itemIds?: string[]) => {
     languageId: languageId.value,
     size: itemIds?.length ?? size.value,
     mode: mode.value,
+    exercise: exercise.value,
     itemIds,
   })
   if (!count) {
@@ -92,6 +107,8 @@ const start = (itemIds?: string[]) => {
       </section>
 
       <LxCard class="setup">
+        <LxSegmented v-model="exercise" :options="exerciseOptions" label="Упражнение" />
+        <p class="caption">{{ EXERCISE_HINTS[exercise] }}</p>
         <LxSegmented v-model="size" :options="sizeOptions" label="Сколько слов" />
         <LxSegmented v-model="mode" :options="modeOptions" label="Режим" />
         <p class="caption">{{ modeHint }}</p>

@@ -25,6 +25,25 @@ const write = (records: AnswerRecord[]) => {
     }
 }
 
+/** Одновременные flush (загрузка экрана + возврат в сеть) отправили бы одни и те же ответы дважды. */
+let inFlight: Promise<number> | null = null
+
+const flushOnce = async (send: (record: AnswerRecord) => Promise<void>): Promise<number> => {
+    const queue = read()
+    let sent = 0
+    for (const record of queue) {
+        try {
+            await send(record)
+            sent++
+        } catch {
+            break
+        }
+    }
+    // очередь перечитываем: пока шла отправка, push мог дописать новые ответы в конец
+    write(read().slice(sent))
+    return sent
+}
+
 export const OfflineAnswerQueue = {
     all: read,
 
@@ -35,18 +54,10 @@ export const OfflineAnswerQueue = {
     count: () => read().length,
 
     /** Отправляет по одному; останавливается на первой ошибке, чтобы не нарушить порядок. */
-    async flush(send: (record: AnswerRecord) => Promise<void>): Promise<number> {
-        const queue = read()
-        let sent = 0
-        for (const record of queue) {
-            try {
-                await send(record)
-                sent++
-            } catch {
-                break
-            }
-        }
-        write(queue.slice(sent))
-        return sent
+    flush(send: (record: AnswerRecord) => Promise<void>): Promise<number> {
+        inFlight ??= flushOnce(send).finally(() => {
+            inFlight = null
+        })
+        return inFlight
     },
 }

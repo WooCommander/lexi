@@ -198,9 +198,12 @@ const addStarter = async (starter: StarterSet) => {
     display: flex;
     align-items: center;
     gap: var(--space-3);
+    // место под название в две строки + подпись: плитки статистики у всех карточек на одной линии
+    min-height: 4.75rem;
   }
 
   &__flag {
+    flex-shrink: 0;
     font-size: 2.5rem;
     line-height: 1;
   }
@@ -208,9 +211,17 @@ const addStarter = async (starter: StarterSet) => {
   &__name {
     font-size: var(--text-h3);
     font-weight: 900;
+    line-height: 1.2;
+    // длинные названия («Молдавский / румынский») не раздувают карточку больше двух строк
+    display: -webkit-box;
+    -webkit-line-clamp: 2;
+    line-clamp: 2;
+    -webkit-box-orient: vertical;
+    overflow: hidden;
   }
 
   &__counts {
+    margin-top: auto; // прижать к низу, если соседняя карточка выше
     display: grid;
     grid-template-columns: repeat(3, 1fr);
     gap: var(--space-2);
@@ -245,5 +256,9 @@ const addStarter = async (starter: StarterSet) => {
   display: flex;
   flex-direction: column;
   gap: var(--space-4);
+
+  :deep(button) {
+    margin-top: auto;
+  }
 }
 </style>

@@ -12,6 +12,7 @@ import LxPageHeader from './components/LxPageHeader.vue'
 import LxProgressBar from './components/LxProgressBar.vue'
 import LxSegmented from './components/LxSegmented.vue'
 import LxSelect from './components/LxSelect.vue'
+import LxSpeakButton from './components/LxSpeakButton.vue'
 import LxSpinner from './components/LxSpinner.vue'
 import LxStatTile from './components/LxStatTile.vue'
 import LxTextarea from './components/LxTextarea.vue'
@@ -33,6 +34,7 @@ export {
     LxProgressBar,
     LxSegmented,
     LxSelect,
+    LxSpeakButton,
     LxSpinner,
     LxStatTile,
     LxTextarea

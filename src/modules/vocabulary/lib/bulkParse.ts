@@ -4,6 +4,8 @@ export interface BulkParseResult {
     items: VocabularyItemInput[]
     errors: { line: number; text: string }[]
     duplicates: number
+    /** Импорт из файла обрезан по лимиту строк. */
+    truncated?: boolean
 }
 
 // Порядок важен: сначала однозначные разделители, затем тире с пробелами
@@ -26,6 +28,7 @@ const splitLine = (line: string): [string, string] | null => {
  *   apple - яблоко
  *   apple;яблоко
  *   măr;яблоко;[mɨr]       ← третья колонка — транскрипция
+ *   măr;яблоко;[mɨr];мэр   ← четвёртая — как читается русскими буквами
  * Работает для любой языковой пары.
  */
 export const parseBulkWords = (text: string): BulkParseResult => {
@@ -54,7 +57,8 @@ export const parseBulkWords = (text: string): BulkParseResult => {
         seen.add(key)
 
         const transcription = parts && parts.length >= 3 && parts[2] ? parts[2] : undefined
-        items.push({ sourceText: pair[0], targetText: pair[1], sourceTranscription: transcription })
+        const reading = parts && parts.length >= 4 && parts[3] ? parts[3] : undefined
+        items.push({ sourceText: pair[0], targetText: pair[1], sourceTranscription: transcription, sourceReading: reading })
     })
 
     return { items, errors, duplicates }

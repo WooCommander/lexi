@@ -1,7 +1,7 @@
 {
   "name": "lexi",
   "private": true,
-  "version": "1.0.1",
+  "version": "1.1.0",
   "type": "module",
   "scripts": {
     "dev": "vite",
@@ -9,12 +9,15 @@
     "preview": "vite preview",
     "typecheck": "vue-tsc -b",
     "test": "vitest",
+    "test:db": "node scripts/test-db.js",
     "get-android-version": "node scripts/get-android-version.js",
     "sync-android-version": "node scripts/sync-android-version.js",
     "update-android": "npm run build && npx cap sync android && npm run sync-android-version",
     "build-debug-apk": "cd android && .\\gradlew.bat assembleDebug",
+    "build-release-apk": "cd android && .\\gradlew.bat assembleRelease",
+    "android:keystore": "node scripts/create-keystore.js",
     "upload-release": "node scripts/upload-release.js",
-    "release": "npm run update-android && npm run build-debug-apk && npm run upload-release",
+    "release": "npm run update-android && npm run build-release-apk && npm run upload-release",
     "android:icons": "node scripts/generate-icons.js && npx capacitor-assets generate --android --iconBackgroundColor \"#0F8B77\" --splashBackgroundColor \"#F6F4EF\" --splashBackgroundColorDark \"#12161C\""
   },
   "dependencies": {
@@ -24,6 +27,7 @@
     "@capacitor/haptics": "^8.0.2",
     "@capacitor/status-bar": "^8.0.3",
     "@supabase/supabase-js": "^2.47.10",
+    "fflate": "^0.8.3",
     "lucide-vue-next": "^0.563.0",
     "pinia": "^3.0.1",
     "vue": "^3.5.13",

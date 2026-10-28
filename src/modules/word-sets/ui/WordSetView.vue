@@ -12,6 +12,7 @@ import {
   LxInput,
   LxModal,
   LxPageHeader,
+  LxSpeakButton,
   LxSpinner,
   LxTextarea,
 } from '@/design-system'
@@ -236,9 +237,11 @@ const toggleFavorite = async (itemId: string) => {
             <div class="words__text">
               <span class="words__source" :lang="pair.source.value?.code">{{ e.item.sourceText }}</span>
               <span v-if="e.item.sourceTranscription" class="caption">{{ e.item.sourceTranscription }}</span>
+              <span v-if="e.item.sourceReading" class="caption">«{{ e.item.sourceReading }}»</span>
             </div>
             <span class="words__target" :lang="pair.target.value?.code">{{ e.item.targetText }}</span>
             <div class="words__actions">
+              <LxSpeakButton :text="e.item.sourceText" :lang="pair.source.value?.code" />
               <template v-if="isStudent">
                 <LxBadge :tone="statusTone(study.progress.get(e.item.id)?.status ?? WordLearningStatus.New)">
                   {{ STATUS_LABELS[study.progress.get(e.item.id)?.status ?? WordLearningStatus.New] }}

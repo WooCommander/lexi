@@ -11,7 +11,7 @@ const router = useRouter()
 const session = useTrainingSession()
 const study = useStudyStore()
 
-const total = computed(() => session.knownCount + session.unknownCount)
+const total = computed(() => session.knownCount + session.unsureCount + session.unknownCount)
 const mistakes = computed(() => {
   const byId = new Map(study.studyItems.map(s => [s.item.id, s.item]))
   return session.mistakeItemIds.map(id => byId.get(id)).filter(i => !!i)
@@ -56,6 +56,7 @@ const home = () => {
     <div class="grid-stats">
       <LxStatTile label="Слов" :value="total" />
       <LxStatTile label="Знаю" :value="session.knownCount" tone="success" />
+      <LxStatTile v-if="session.unsureCount" label="Сомневаюсь" :value="session.unsureCount" tone="warning" />
       <LxStatTile label="Не знаю" :value="session.unknownCount" tone="error" />
     </div>
 

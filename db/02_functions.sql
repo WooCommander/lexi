@@ -166,3 +166,31 @@ end $$;
 
 grant execute on function preview_invite_code(text) to authenticated;
 grant execute on function redeem_invite_code(text)  to authenticated;
+
+-- Коды подбираются перебором, поэтому ни предпросмотр, ни подключение не доступны без входа.
+-- (В Supabase права anon выдаются по умолчанию, отдельно от PUBLIC — отзываем оба.)
+revoke execute on function preview_invite_code(text) from public, anon;
+revoke execute on function redeem_invite_code(text)  from public, anon;
+
+-- ---------- Ограничения родителя --------------------------------------
+-- RLS разрешает ребёнку обновлять свою строку user_settings целиком, поэтому запреты родителя
+-- (доступные языки, личные слова) защищаем триггером: пока у ребёнка есть родитель,
+-- менять эти два поля может только родитель. service_role и SQL Editor (auth.uid() is null) не затрагиваются.
+create or replace function guard_parent_restrictions()
+returns trigger language plpgsql security definer set search_path = public as $$
+begin
+  if auth.uid() is not null
+     and auth.uid() = new.user_id
+     and (new.allowed_language_ids is distinct from old.allowed_language_ids
+          or new.allow_personal_words is distinct from old.allow_personal_words)
+     and exists (select 1 from parent_students where student_id = new.user_id)
+  then
+    raise exception 'restricted_by_parent' using errcode = '42501';
+  end if;
+  return new;
+end $$;
+
+drop trigger if exists user_settings_guard_parent on user_settings;
+create trigger user_settings_guard_parent
+  before update on user_settings
+  for each row execute function guard_parent_restrictions();

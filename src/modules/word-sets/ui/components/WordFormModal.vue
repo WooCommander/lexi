@@ -16,6 +16,8 @@ const form = reactive<Required<VocabularyItemInput>>({
   targetText: '',
   sourceTranscription: '',
   targetTranscription: '',
+  sourceReading: '',
+  targetReading: '',
   exampleSource: '',
   exampleTarget: '',
 })
@@ -29,6 +31,8 @@ watch(
     form.targetText = i?.targetText ?? ''
     form.sourceTranscription = i?.sourceTranscription ?? ''
     form.targetTranscription = i?.targetTranscription ?? ''
+    form.sourceReading = i?.sourceReading ?? ''
+    form.targetReading = i?.targetReading ?? ''
     form.exampleSource = i?.exampleSource ?? ''
     form.exampleTarget = i?.exampleTarget ?? ''
   },
@@ -47,17 +51,19 @@ const submit = () => {
       <div class="word-form__lang">{{ sourceFlag }} {{ sourceLabel }}</div>
       <LxInput v-model="form.sourceText" label="Слово" :lang="source?.code" placeholder="beautiful" />
       <LxInput v-model="form.sourceTranscription" label="Транскрипция" :lang="source?.code" placeholder="ˈbjuːtɪfəl" />
+      <LxInput v-model="form.sourceReading" label="Как читается (русскими буквами)" placeholder="бьютифул" />
 
       <div class="word-form__lang">{{ targetFlag }} {{ targetLabel }}</div>
       <LxInput v-model="form.targetText" label="Перевод" :lang="target?.code" placeholder="красивый" />
 
-      <details class="word-form__more" :open="!!(form.exampleSource || form.targetTranscription)">
+      <details class="word-form__more" :open="!!(form.exampleSource || form.targetTranscription || form.targetReading)">
         <summary>Пример и дополнительно</summary>
         <div class="stack">
           <LxInput v-model="form.exampleSource" label="Пример" :lang="source?.code" placeholder="It is a beautiful day." />
           <LxInput v-model="form.exampleTarget" label="Перевод примера" :lang="target?.code"
             placeholder="Сегодня прекрасный день." />
           <LxInput v-model="form.targetTranscription" :label="`Транскрипция (${targetLabel})`" :lang="target?.code" />
+          <LxInput v-model="form.targetReading" :label="`Как читается (${targetLabel})`" />
         </div>
       </details>
       <button type="submit" hidden />

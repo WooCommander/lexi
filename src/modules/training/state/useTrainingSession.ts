@@ -1,6 +1,6 @@
 import { defineStore } from 'pinia'
 import { computed, ref } from 'vue'
-import { TrainingResult, type TrainingCard, type TrainingMode } from '../domain/Training'
+import { TrainingResult, type ExerciseType, type TrainingCard, type TrainingMode } from '../domain/Training'
 import { buildSession, requeuePosition } from '../lib/sessionBuilder'
 import { useStudyStore } from './useStudyStore'
 import { useSettingsStore } from '@/modules/settings/state/useSettingsStore'
@@ -9,6 +9,8 @@ export interface SessionConfig {
     languageId: string
     size: number
     mode: TrainingMode
+    /** По умолчанию — карточки. */
+    exercise?: ExerciseType
     /** Явный список слов: повтор ошибок / сложные / избранное. */
     itemIds?: string[]
 }
@@ -29,6 +31,7 @@ export const useTrainingSession = defineStore('trainingSession', () => {
     const firstResults = ref(new Map<string, TrainingResult>())
     const doneItemIds = ref(new Set<string>())
     const requeues = ref(new Map<string, number>())
+    const exercise = computed<ExerciseType>(() => config.value?.exercise ?? 'cards')
     const status = ref<'idle' | 'active' | 'finished'>('idle')
 
     const current = computed(() => queue.value[index.value] ?? null)
@@ -38,7 +41,8 @@ export const useTrainingSession = defineStore('trainingSession', () => {
     const isRetry = computed(() => !!current.value && firstResults.value.has(current.value.item.id))
 
     const knownCount = computed(() => [...firstResults.value.values()].filter(r => r === TrainingResult.Correct).length)
-    const unknownCount = computed(() => firstResults.value.size - knownCount.value)
+    const unsureCount = computed(() => [...firstResults.value.values()].filter(r => r === TrainingResult.Unsure).length)
+    const unknownCount = computed(() => firstResults.value.size - knownCount.value - unsureCount.value)
     const mistakeItemIds = computed(() =>
         [...firstResults.value.entries()].filter(([, r]) => r !== TrainingResult.Correct).map(([id]) => id),
     )
@@ -114,6 +118,7 @@ export const useTrainingSession = defineStore('trainingSession', () => {
 
     return {
         config,
+        exercise,
         queue,
         index,
         revealed,
@@ -123,6 +128,7 @@ export const useTrainingSession = defineStore('trainingSession', () => {
         answered,
         isRetry,
         knownCount,
+        unsureCount,
         unknownCount,
         mistakeItemIds,
         accuracyPercent,

@@ -14,6 +14,7 @@ import { useTheme } from '@/shared/composables/useTheme'
 import { useUpdateStore } from '@/modules/updates/state/useUpdateStore'
 import { useNotify } from '@/shared/composables/useNotify'
 import { errorMessage } from '@/shared/lib/errors'
+import { useSpeech } from '@/shared/composables/useSpeech'
 
 const router = useRouter()
 const auth = useAuthStore()
@@ -23,6 +24,7 @@ const study = useStudyStore()
 const { isDark, toggleTheme } = useTheme()
 const updates = useUpdateStore()
 const { notify } = useNotify()
+const speech = useSpeech()
 
 const name = ref(auth.displayName)
 const isStudent = computed(() => auth.hasRole(UserRole.Student))
@@ -103,6 +105,10 @@ const logout = async () => {
       <LxSelect :model-value="store.settings.nativeLanguageId" :options="languages.options" label="Мой родной язык"
         @update:model-value="v => save({ nativeLanguageId: v ? String(v) : null })" />
       <p class="caption">По нему определяется изучаемый язык: «English → Русский» и «Русский → English» — это английский.</p>
+
+      <LxCheckbox v-if="speech.isSupported" v-model="speech.autoSpeak.value">
+        Озвучивать слова автоматически (на этом устройстве)
+      </LxCheckbox>
 
       <template v-if="isStudent">
         <LxSegmented :model-value="store.settings.dailyGoal" :options="goalOptions" label="Дневная цель (слов)"

@@ -13,6 +13,10 @@ export interface VocabularyItem {
     sourceTranscription?: string
     targetTranscription?: string
 
+    /** Как читается буквами родного языка («эпл»); дополняет транскрипцию, а не заменяет её. */
+    sourceReading?: string
+    targetReading?: string
+
     exampleSource?: string
     exampleTarget?: string
 
@@ -25,6 +29,8 @@ export interface VocabularyItemInput {
     targetText: string
     sourceTranscription?: string
     targetTranscription?: string
+    sourceReading?: string
+    targetReading?: string
     exampleSource?: string
     exampleTarget?: string
 }
@@ -37,6 +43,8 @@ export interface VocabularyItemRow {
     target_text: string
     source_transcription: string | null
     target_transcription: string | null
+    source_reading: string | null
+    target_reading: string | null
     example_source: string | null
     example_target: string | null
     created_by: string
@@ -51,6 +59,8 @@ export const vocabularyItemFromRow = (row: VocabularyItemRow): VocabularyItem =>
     targetText: row.target_text,
     sourceTranscription: row.source_transcription ?? undefined,
     targetTranscription: row.target_transcription ?? undefined,
+    sourceReading: row.source_reading ?? undefined,
+    targetReading: row.target_reading ?? undefined,
     exampleSource: row.example_source ?? undefined,
     exampleTarget: row.example_target ?? undefined,
     createdBy: row.created_by,
@@ -66,6 +76,8 @@ export const vocabularyItemToRow = (pair: LanguagePair, input: VocabularyItemInp
     target_text: input.targetText.trim(),
     source_transcription: clean(input.sourceTranscription),
     target_transcription: clean(input.targetTranscription),
+    source_reading: clean(input.sourceReading),
+    target_reading: clean(input.targetReading),
     example_source: clean(input.exampleSource),
     example_target: clean(input.exampleTarget),
 })

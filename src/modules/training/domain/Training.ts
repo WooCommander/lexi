@@ -9,7 +9,7 @@ export enum TrainingDirection {
     Reverse = 'reverse',
 }
 
-/** MVP: «Знаю / Не знаю». Unsure зарезервирован под «Сомневаюсь». */
+/** «Знаю / Сомневаюсь / Не знаю». «Сомневаюсь» не продвигает интервал и возвращает слово в тренировку. */
 export enum TrainingResult {
     Correct = 'correct',
     Wrong = 'wrong',
@@ -35,6 +35,21 @@ export const TRAINING_MODE_LABELS: Record<TrainingMode, string> = {
     mixed: 'Смешанный',
     [TrainingDirection.Forward]: 'Прямой',
     [TrainingDirection.Reverse]: 'Обратный',
+}
+
+/** Вид упражнения: карточки (вспомнить и проверить), выбор перевода, ввод слова. */
+export type ExerciseType = 'cards' | 'choice' | 'typing'
+
+export const EXERCISE_LABELS: Record<ExerciseType, string> = {
+    cards: 'Карточки',
+    choice: 'Выбор',
+    typing: 'Письмо',
+}
+
+export const EXERCISE_HINTS: Record<ExerciseType, string> = {
+    cards: 'Вспомните перевод и отметьте, знаете ли вы слово',
+    choice: 'Выберите правильный перевод из вариантов',
+    typing: 'Напишите перевод сами',
 }
 
 export const SESSION_SIZES = [5, 10, 20, 30] as const

@@ -11,3 +11,8 @@ dev-dist
 !.vscode/extensions.json
 .idea
 .DS_Store
+
+# Android release-ключ и пароли — никогда не коммитить
+android/keystore.properties
+*.jks
+*.keystore

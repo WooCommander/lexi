@@ -91,6 +91,8 @@ const isAssigned = (starter: StarterSet) => {
 const assignTo = async (wordSetId: string) => {
   const studentId = forStudentId.value
   if (!studentId) return
+  // уже назначено — повторное задание не создаём (двойной тап)
+  if (assignmentsStore.assignments.some(a => a.wordSetId === wordSetId && a.studentIds.includes(studentId))) return
   await assignmentsStore.create({
     wordSetId,
     studentIds: [studentId],
@@ -99,6 +101,7 @@ const assignTo = async (wordSetId: string) => {
 }
 
 const addOne = async (starter: StarterSet) => {
+  if (addingId.value) return // добавление уже идёт — второй тап ничего не делает
   try {
     const set = setOf(starter) ?? (await add(starter))
     if (forStudentId.value) {

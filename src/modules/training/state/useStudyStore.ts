@@ -39,7 +39,7 @@ export const useStudyStore = defineStore('study', () => {
     const progress = ref(new Map<string, WordProgress>())
     const favorites = ref(new Set<string>())
     const todayItemIds = ref(new Set<string>())
-    const pendingCount = ref(OfflineAnswerQueue.count())
+    const pendingCount = ref(0)
     const isLoading = ref(false)
     const loadedFor = ref<string | null>(null)
     const error = ref<string | null>(null)
@@ -116,9 +116,14 @@ export const useStudyStore = defineStore('study', () => {
         itemsForLanguage(languageId).filter(s => todayItemIds.value.has(s.item.id)).length
 
     const flushPending = async () => {
-        if (!OfflineAnswerQueue.count()) return 0
-        const sent = await OfflineAnswerQueue.flush(ProgressService.saveAnswer)
-        pendingCount.value = OfflineAnswerQueue.count()
+        const me = useAuthStore().userId
+        if (!me) return 0
+        if (!OfflineAnswerQueue.count(me)) {
+            pendingCount.value = 0
+            return 0
+        }
+        const sent = await OfflineAnswerQueue.flush(ProgressService.saveAnswer, me)
+        pendingCount.value = OfflineAnswerQueue.count(me)
         return sent
     }
 
@@ -141,7 +146,7 @@ export const useStudyStore = defineStore('study', () => {
             material.value = m
             progress.value = new Map(p.map(x => [x.vocabularyItemId, x]))
             // ответы из офлайн-очереди новее серверных
-            for (const record of OfflineAnswerQueue.all()) {
+            for (const record of OfflineAnswerQueue.all(studentId)) {
                 progress.value.set(record.progress.vocabularyItemId, record.progress)
                 today.push(record.progress.vocabularyItemId)
             }
@@ -179,11 +184,11 @@ export const useStudyStore = defineStore('study', () => {
             answeredAt: now.toISOString(),
         }
         try {
-            if (OfflineAnswerQueue.count()) throw new Error('queue not empty')
+            if (OfflineAnswerQueue.count(auth.userId)) throw new Error('queue not empty')
             await ProgressService.saveAnswer(record)
         } catch {
             OfflineAnswerQueue.push(record)
-            pendingCount.value = OfflineAnswerQueue.count()
+            pendingCount.value = OfflineAnswerQueue.count(auth.userId)
         }
     }
 
@@ -217,6 +222,8 @@ export const useStudyStore = defineStore('study', () => {
         favorites.value = new Set()
         todayItemIds.value = new Set()
         loadedFor.value = null
+        error.value = null
+        pendingCount.value = 0
     }
 
     return {

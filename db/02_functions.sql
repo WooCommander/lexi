@@ -8,14 +8,14 @@
 -- Клиент передаёт в options.data: { name: string, roles: ['student' | 'parent' | 'teacher'] }
 
 create or replace function handle_new_user()
-returns trigger language plpgsql security definer set search_path = public as $$
+returns trigger language plpgsql security definer set search_path = public, pg_temp as $$
 declare
   r        text;
   roles    jsonb := new.raw_user_meta_data -> 'roles';
   assigned int := 0;
 begin
   insert into profiles (id, name)
-  values (new.id, coalesce(nullif(trim(new.raw_user_meta_data ->> 'name'), ''), split_part(new.email, '@', 1)))
+  values (new.id, coalesce(nullif(trim(new.raw_user_meta_data ->> 'name'), ''), nullif(split_part(new.email, '@', 1), ''), 'user'))
   on conflict (id) do nothing;
 
   if roles is null or jsonb_typeof(roles) <> 'array' or jsonb_array_length(roles) = 0 then
@@ -48,38 +48,38 @@ create trigger on_auth_user_created
 -- ---------- Хелперы доступа ------------------------------------------
 
 create or replace function has_role(p_role text)
-returns boolean language sql security definer stable set search_path = public as $$
+returns boolean language sql security definer stable set search_path = public, pg_temp as $$
   select exists (select 1 from user_roles where user_id = auth.uid() and role = p_role);
 $$;
 
 create or replace function is_teacher_of(p_student uuid)
-returns boolean language sql security definer stable set search_path = public as $$
+returns boolean language sql security definer stable set search_path = public, pg_temp as $$
   select exists (select 1 from teacher_students
                  where teacher_id = auth.uid() and student_id = p_student);
 $$;
 
 create or replace function is_parent_of(p_student uuid)
-returns boolean language sql security definer stable set search_path = public as $$
+returns boolean language sql security definer stable set search_path = public, pg_temp as $$
   select exists (select 1 from parent_students
                  where parent_id = auth.uid() and student_id = p_student);
 $$;
 
 -- Я сам, мой ученик или мой ребёнок.
 create or replace function can_view_student(p_student uuid)
-returns boolean language sql security definer stable set search_path = public as $$
+returns boolean language sql security definer stable set search_path = public, pg_temp as $$
   select p_student = auth.uid() or is_teacher_of(p_student) or is_parent_of(p_student);
 $$;
 
 -- Любая установленная связь в обе стороны (для чтения имён в профилях).
 create or replace function is_linked_with(p_user uuid)
-returns boolean language sql security definer stable set search_path = public as $$
+returns boolean language sql security definer stable set search_path = public, pg_temp as $$
   select can_view_student(p_user)
       or exists (select 1 from teacher_students where student_id = auth.uid() and teacher_id = p_user)
       or exists (select 1 from parent_students  where student_id = auth.uid() and parent_id  = p_user);
 $$;
 
 create or replace function can_read_word_set(p_set uuid)
-returns boolean language sql security definer stable set search_path = public as $$
+returns boolean language sql security definer stable set search_path = public, pg_temp as $$
   select exists (select 1 from word_sets s
                  where s.id = p_set
                    and (s.owner_id = auth.uid() or is_teacher_of(s.owner_id) or is_parent_of(s.owner_id)))
@@ -89,12 +89,12 @@ returns boolean language sql security definer stable set search_path = public as
 $$;
 
 create or replace function can_edit_word_set(p_set uuid)
-returns boolean language sql security definer stable set search_path = public as $$
+returns boolean language sql security definer stable set search_path = public, pg_temp as $$
   select exists (select 1 from word_sets where id = p_set and owner_id = auth.uid());
 $$;
 
 create or replace function can_read_vocab_item(p_item uuid)
-returns boolean language sql security definer stable set search_path = public as $$
+returns boolean language sql security definer stable set search_path = public, pg_temp as $$
   select exists (select 1 from vocabulary_items where id = p_item and created_by = auth.uid())
       or exists (select 1 from word_set_items wsi
                  where wsi.vocabulary_item_id = p_item and can_read_word_set(wsi.word_set_id))
@@ -103,19 +103,19 @@ returns boolean language sql security definer stable set search_path = public as
 $$;
 
 create or replace function can_read_assignment(p_assignment uuid)
-returns boolean language sql security definer stable set search_path = public as $$
+returns boolean language sql security definer stable set search_path = public, pg_temp as $$
   select exists (select 1 from assignments where id = p_assignment and assigned_by = auth.uid())
       or exists (select 1 from assignment_students
                  where assignment_id = p_assignment and can_view_student(student_id));
 $$;
 
 create or replace function owns_assignment(p_assignment uuid)
-returns boolean language sql security definer stable set search_path = public as $$
+returns boolean language sql security definer stable set search_path = public, pg_temp as $$
   select exists (select 1 from assignments where id = p_assignment and assigned_by = auth.uid());
 $$;
 
 create or replace function owns_group(p_group uuid)
-returns boolean language sql security definer stable set search_path = public as $$
+returns boolean language sql security definer stable set search_path = public, pg_temp as $$
   select exists (select 1 from groups where id = p_group and teacher_id = auth.uid());
 $$;
 
@@ -124,7 +124,7 @@ $$;
 -- Что увидит ученик перед подтверждением подключения.
 create or replace function preview_invite_code(p_code text)
 returns table (kind text, owner_name text, group_name text)
-language sql security definer stable set search_path = public as $$
+language sql security definer stable set search_path = public, pg_temp as $$
   select ic.kind, p.name, g.name
   from invite_codes ic
   join profiles p on p.id = ic.owner_id
@@ -133,7 +133,7 @@ language sql security definer stable set search_path = public as $$
 $$;
 
 create or replace function redeem_invite_code(p_code text)
-returns json language plpgsql security definer set search_path = public as $$
+returns json language plpgsql security definer set search_path = public, pg_temp as $$
 declare
   v  invite_codes%rowtype;
   me uuid := auth.uid();
@@ -153,6 +153,11 @@ begin
   insert into user_roles (user_id, role) values (me, 'student') on conflict do nothing;
 
   if v.kind = 'parent' then
+    -- Уже «управляемому» ребёнку нельзя подключить ещё одного родителя своим кодом: иначе он обошёл бы контроль настоящего.
+    if is_managed_by_parent(me)
+       and not exists (select 1 from parent_students where parent_id = v.owner_id and student_id = me) then
+      raise exception 'already_managed' using errcode = '42501';
+    end if;
     insert into parent_students (parent_id, student_id) values (v.owner_id, me) on conflict do nothing;
   else
     insert into teacher_students (teacher_id, student_id) values (v.owner_id, me) on conflict do nothing;
@@ -162,7 +167,7 @@ begin
       -- новый участник группы получает уже активные задания группы
       insert into assignment_students (assignment_id, student_id)
         select a.id, me from assignments a
-        where a.group_id = v.group_id and a.status = 'active'
+        where a.group_id = v.group_id and a.status = 'active' and a.assigned_by = v.owner_id
       on conflict do nothing;
     end if;
   end if;
@@ -183,12 +188,12 @@ revoke execute on function redeem_invite_code(text)  from public, anon;
 -- Первого администратора назначают в SQL Editor:  select grant_admin('почта@пример.ru');
 
 create or replace function is_admin()
-returns boolean language sql security definer stable set search_path = public as $$
+returns boolean language sql security definer stable set search_path = public, pg_temp as $$
   select exists (select 1 from user_roles where user_id = auth.uid() and role = 'admin');
 $$;
 
 create or replace function require_admin()
-returns void language plpgsql security definer set search_path = public as $$
+returns void language plpgsql security definer set search_path = public, pg_temp as $$
 begin
   if not is_admin() then
     raise exception 'forbidden' using errcode = '42501';
@@ -197,12 +202,13 @@ end $$;
 
 -- Только владелец БД / SQL Editor: выдать роль администратора по почте.
 create or replace function grant_admin(p_email text)
-returns void language plpgsql security definer set search_path = public as $$
+returns void language plpgsql security definer set search_path = public, pg_temp as $$
 declare v_id uuid;
 begin
-  select id into v_id from auth.users where lower(email) = lower(trim(p_email));
+  select id into v_id from auth.users
+   where lower(email) = lower(trim(p_email)) and email_confirmed_at is not null;
   if v_id is null then
-    raise exception 'user_not_found';
+    raise exception 'user_not_found_or_unconfirmed';
   end if;
   insert into profiles (id, name) values (v_id, split_part(trim(p_email), '@', 1)) on conflict (id) do nothing;
   insert into user_roles (user_id, role) values (v_id, 'admin') on conflict do nothing;
@@ -211,25 +217,42 @@ end $$;
 -- Последнего администратора из приложения не снять: иначе управление потеряно.
 -- Из SQL Editor (auth.uid() is null) ограничение не действует.
 create or replace function guard_last_admin()
-returns trigger language plpgsql security definer set search_path = public as $$
+returns trigger language plpgsql security definer set search_path = public, pg_temp as $$
 begin
   if auth.uid() is not null
      and old.role = 'admin'
-     and (select count(*) from user_roles where role = 'admin') <= 1
+     and (tg_op = 'DELETE' or new.role <> 'admin' or new.user_id <> old.user_id)
   then
-    raise exception 'last_admin' using errcode = '42501';
+    perform pg_advisory_xact_lock(7101);  -- два админа одновременно не обойдут проверку
+    if (select count(*) from user_roles where role = 'admin') <= 1 then
+      raise exception 'last_admin' using errcode = '42501';
+    end if;
   end if;
-  return old;
+  if tg_op = 'DELETE' then return old; end if;
+  return new;
 end $$;
 
 drop trigger if exists user_roles_guard_last_admin on user_roles;
 create trigger user_roles_guard_last_admin
-  before delete on user_roles
+  before delete or update of role, user_id on user_roles
   for each row execute function guard_last_admin();
+
+-- Коды приглашений хранятся в верхнем регистре без пробелов.
+create or replace function normalize_invite_code()
+returns trigger language plpgsql as $$
+begin
+  new.code := upper(regexp_replace(new.code, '\s+', '', 'g'));
+  return new;
+end $$;
+
+drop trigger if exists invite_codes_normalize on invite_codes;
+create trigger invite_codes_normalize
+  before insert or update of code on invite_codes
+  for each row execute function normalize_invite_code();
 
 -- Сводка по всем пользователям.
 create or replace function admin_overview()
-returns json language plpgsql security definer set search_path = public as $$
+returns json language plpgsql security definer set search_path = public, pg_temp as $$
 begin
   perform require_admin();
   return json_build_object(
@@ -249,7 +272,7 @@ end $$;
 -- Рейтинг по числу освоенных слов среди всех пользователей.
 create or replace function admin_top_learners(p_limit int default 20)
 returns table (student_id uuid, name text, learned bigint, correct bigint, wrong bigint, last_active timestamptz)
-language plpgsql security definer set search_path = public as $$
+language plpgsql security definer set search_path = public, pg_temp as $$
 begin
   perform require_admin();
   return query
@@ -268,7 +291,7 @@ end $$;
 -- Все пользователи с почтой и последним входом (почта живёт в auth.users, клиенту она недоступна).
 create or replace function admin_list_users()
 returns table (id uuid, name text, email text, roles text[], created_at timestamptz, last_sign_in_at timestamptz)
-language plpgsql security definer set search_path = public as $$
+language plpgsql security definer set search_path = public, pg_temp as $$
 begin
   perform require_admin();
   return query
@@ -282,7 +305,7 @@ end $$;
 
 -- Полное удаление пользователя вместе с его данными. Себя удалить нельзя.
 create or replace function admin_delete_user(p_user uuid)
-returns void language plpgsql security definer set search_path = public as $$
+returns void language plpgsql security definer set search_path = public, pg_temp as $$
 begin
   perform require_admin();
   if p_user = auth.uid() then
@@ -294,7 +317,7 @@ end $$;
 -- Активность по дням: сколько пользователей занималось и сколько ответов дали.
 create or replace function admin_activity(p_days int default 30)
 returns table (day date, active_users bigint, answers bigint, correct bigint)
-language plpgsql security definer set search_path = public as $$
+language plpgsql security definer set search_path = public, pg_temp as $$
 declare n int := greatest(1, least(coalesce(p_days, 30), 365));
 begin
   perform require_admin();
@@ -312,7 +335,7 @@ end $$;
 -- Новые пользователи по дням и ролям.
 create or replace function admin_signups(p_days int default 30)
 returns table (day date, students bigint, teachers bigint, parents bigint)
-language plpgsql security definer set search_path = public as $$
+language plpgsql security definer set search_path = public, pg_temp as $$
 declare n int := greatest(1, least(coalesce(p_days, 30), 365));
 begin
   perform require_admin();
@@ -331,7 +354,7 @@ end $$;
 -- Сколько учеников освоили 0 / 1–9 / 10–49 / 50–99 / 100+ слов.
 create or replace function admin_learned_distribution()
 returns table (bucket text, ord int, students bigint)
-language plpgsql security definer set search_path = public as $$
+language plpgsql security definer set search_path = public, pg_temp as $$
 begin
   perform require_admin();
   return query
@@ -352,7 +375,7 @@ end $$;
 -- Изучаемый язык пары — тот, что не родной для ученика (родной из user_settings, по умолчанию русский).
 create or replace function admin_language_stats()
 returns table (language_id uuid, code text, name text, learners bigint, learned bigint, answers_30d bigint)
-language plpgsql security definer set search_path = public as $$
+language plpgsql security definer set search_path = public, pg_temp as $$
 begin
   perform require_admin();
   return query
@@ -390,7 +413,7 @@ end $$;
 -- Самые «популярные» слова: по числу ответов всех пользователей.
 create or replace function admin_popular_words(p_limit int default 20)
 returns table (item_id uuid, source_text text, target_text text, language_code text, learners bigint, answers bigint, correct bigint)
-language plpgsql security definer set search_path = public as $$
+language plpgsql security definer set search_path = public, pg_temp as $$
 begin
   perform require_admin();
   return query
@@ -410,7 +433,7 @@ end $$;
 create or replace function admin_teachers()
 returns table (teacher_id uuid, name text, students bigint, groups bigint, sets bigint, assignments bigint,
                learned bigint, correct bigint, wrong bigint, active_students_7d bigint, last_active timestamptz)
-language plpgsql security definer set search_path = public as $$
+language plpgsql security definer set search_path = public, pg_temp as $$
 begin
   perform require_admin();
   return query
@@ -446,7 +469,7 @@ grant execute on function admin_overview(), admin_top_learners(int), admin_list_
 
 -- Можно ли пользователю создавать личные наборы и слова (запрет ставит родитель; по умолчанию — можно).
 create or replace function personal_words_allowed(p_user uuid)
-returns boolean language sql security definer stable set search_path = public as $$
+returns boolean language sql security definer stable set search_path = public, pg_temp as $$
   select coalesce((select allow_personal_words from user_settings where user_id = p_user), true);
 $$;
 
@@ -457,12 +480,12 @@ $$;
 -- RLS разрешает строку user_settings целиком, поэтому защищаем триггером; service_role и
 -- SQL Editor (auth.uid() is null) не затрагиваются.
 create or replace function is_managed_by_parent(p_user uuid)
-returns boolean language sql security definer stable set search_path = public as $$
+returns boolean language sql security definer stable set search_path = public, pg_temp as $$
   select exists (select 1 from parent_students where student_id = p_user);
 $$;
 
 create or replace function guard_parent_restrictions()
-returns trigger language plpgsql security definer set search_path = public as $$
+returns trigger language plpgsql security definer set search_path = public, pg_temp as $$
 begin
   if auth.uid() is not null
      and auth.uid() = new.user_id

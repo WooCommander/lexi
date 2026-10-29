@@ -39,5 +39,10 @@ export const useAssignmentsStore = defineStore('assignments', () => {
         assignments.value = assignments.value.filter(a => a.id !== id)
     }
 
-    return { assignments, isLoading, load, create, setStatus, remove }
+    const reset = () => {
+        assignments.value = []
+        loadedFor.value = null
+    }
+
+    return { assignments, isLoading, load, reset, create, setStatus, remove }
 })

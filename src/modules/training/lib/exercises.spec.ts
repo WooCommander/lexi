@@ -30,6 +30,14 @@ describe('checkTypedAnswer', () => {
         expect(verdictToResult('close')).toBe(TrainingResult.Correct)
     })
 
+    it('keeps Cyrillic й/ї distinct from и/і, but still forgives Latin diacritics', () => {
+        expect(checkTypedAnswer('мий', 'мій')).toBe('wrong')
+        expect(checkTypedAnswer('їжа', 'ижа')).toBe('wrong')
+        expect(checkTypedAnswer('МІЙ', 'мій')).toBe('exact')
+        expect(checkTypedAnswer('fata', 'față')).toBe('close')
+        expect(checkTypedAnswer('stiu', 'știu')).toBe('close')
+    })
+
     it('flags a single typo in a longer word as unsure', () => {
         expect(checkTypedAnswer('beutiful', 'beautiful')).toBe('typo')
         expect(verdictToResult('typo')).toBe(TrainingResult.Unsure)

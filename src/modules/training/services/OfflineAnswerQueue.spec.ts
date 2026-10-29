@@ -1,5 +1,5 @@
 import { beforeEach, describe, expect, it } from 'vitest'
-import { OfflineAnswerQueue } from './OfflineAnswerQueue'
+import { OfflineAnswerQueue, isPermanentError } from './OfflineAnswerQueue'
 import { SpacedRepetitionService } from '../lib/SpacedRepetitionService'
 import { TrainingDirection, TrainingResult } from '../domain/Training'
 import type { AnswerRecord } from './ProgressService'
@@ -18,8 +18,8 @@ const installLocalStorage = () => {
     return store
 }
 
-const record = (itemId: string): AnswerRecord => ({
-    progress: { ...SpacedRepetitionService.initialState(), studentId: 'st', vocabularyItemId: itemId },
+const record = (itemId: string, studentId = 'st'): AnswerRecord => ({
+    progress: { ...SpacedRepetitionService.initialState(), studentId, vocabularyItemId: itemId },
     direction: TrainingDirection.Forward,
     result: TrainingResult.Correct,
     answeredAt: '2026-10-02T10:00:00Z',
@@ -80,6 +80,58 @@ describe('OfflineAnswerQueue', () => {
         expect(first).toBe(2)
         expect(second).toBe(2)
         expect(OfflineAnswerQueue.count()).toBe(0)
+    })
+
+    it('sends only the signed-in user answers and keeps the others for their owner', async () => {
+        OfflineAnswerQueue.push(record('a', 'anna'))
+        OfflineAnswerQueue.push(record('b', 'boris'))
+        OfflineAnswerQueue.push(record('c', 'boris'))
+
+        const sent: string[] = []
+        const count = await OfflineAnswerQueue.flush(async r => void sent.push(r.progress.vocabularyItemId), 'boris')
+
+        expect(count).toBe(2)
+        expect(sent).toEqual(['b', 'c'])
+        expect(OfflineAnswerQueue.count('anna')).toBe(1)
+        expect(OfflineAnswerQueue.count('boris')).toBe(0)
+        expect(ids()).toEqual(['a'])
+    })
+
+    it('a stuck answer of another user does not block the current user', async () => {
+        OfflineAnswerQueue.push(record('old', 'anna'))
+        OfflineAnswerQueue.push(record('mine', 'boris'))
+        await OfflineAnswerQueue.flush(async () => undefined, 'boris')
+        expect(OfflineAnswerQueue.count('boris')).toBe(0)
+    })
+
+    it('drops an answer that can never succeed instead of blocking the queue', async () => {
+        OfflineAnswerQueue.push(record('gone'))
+        OfflineAnswerQueue.push(record('ok'))
+        const sent: string[] = []
+        await OfflineAnswerQueue.flush(async r => {
+            if (r.progress.vocabularyItemId === 'gone') throw { code: '23503' } // слово удалено (FK)
+            sent.push(r.progress.vocabularyItemId)
+        }, 'st')
+        expect(sent).toEqual(['ok'])
+        expect(OfflineAnswerQueue.count('st')).toBe(0)
+    })
+
+    it('keeps answers on a temporary failure', async () => {
+        OfflineAnswerQueue.push(record('a'))
+        await OfflineAnswerQueue.flush(async () => {
+            throw new TypeError('Failed to fetch')
+        }, 'st')
+        expect(OfflineAnswerQueue.count('st')).toBe(1)
+    })
+
+    it('tells permanent errors from temporary ones', () => {
+        expect(isPermanentError({ code: '23503' })).toBe(true)
+        expect(isPermanentError({ code: '42501' })).toBe(true)
+        expect(isPermanentError({ status: 403 })).toBe(true)
+        expect(isPermanentError({ status: 429 })).toBe(false)
+        expect(isPermanentError({ status: 503 })).toBe(false)
+        expect(isPermanentError(new TypeError('Failed to fetch'))).toBe(false)
+        expect(isPermanentError(null)).toBe(false)
     })
 
     it('survives unavailable or corrupted storage', () => {

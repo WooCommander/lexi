@@ -67,5 +67,10 @@ export const useGroupsStore = defineStore('groups', () => {
         )
     }
 
-    return { groups, isLoading, load, get, create, regenerateCode, rename, remove, addStudent, removeStudent }
+    const reset = () => {
+        groups.value = []
+        loadedFor.value = null
+    }
+
+    return { groups, isLoading, load, reset, get, create, regenerateCode, rename, remove, addStudent, removeStudent }
 })

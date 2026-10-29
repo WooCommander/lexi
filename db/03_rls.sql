@@ -6,6 +6,22 @@
 --  Скрипт можно запускать повторно.
 -- =====================================================================
 
+-- Сначала удаляем ВСЕ политики этих таблиц (в том числе устаревшие под другими именами), затем создаём актуальные:
+-- политики складываются через OR, поэтому забытая старая политика молча расширила бы доступ.
+do $$
+declare p record;
+begin
+  for p in
+    select schemaname, tablename, policyname from pg_policies
+    where schemaname = 'public' and tablename in (
+      'profiles', 'user_roles', 'languages', 'parent_students', 'teacher_students', 'groups', 'group_students',
+      'invite_codes', 'vocabulary_items', 'word_sets', 'word_set_items', 'assignments', 'assignment_students',
+      'word_progress', 'review_history', 'favorites', 'user_settings')
+  loop
+    execute format('drop policy %I on %I.%I', p.policyname, p.schemaname, p.tablename);
+  end loop;
+end $$;
+
 alter table profiles            enable row level security;
 alter table user_roles          enable row level security;
 alter table languages           enable row level security;
@@ -125,7 +141,14 @@ create policy "sets read" on word_sets for select
   using (owner_id = auth.uid() or can_read_word_set(id));
 -- Создать личный набор нельзя, если родитель запретил личные слова (раньше запрет был только в интерфейсе).
 create policy "sets insert" on word_sets for insert
-  with check (owner_id = auth.uid() and (source <> 'personal' or personal_words_allowed(auth.uid())));
+  with check (
+    owner_id = auth.uid()
+    and case source
+          when 'teacher' then has_role('teacher')
+          when 'parent'  then has_role('parent')
+          else personal_words_allowed(auth.uid())
+        end
+  );
 create policy "sets update" on word_sets for update
   using (owner_id = auth.uid()) with check (owner_id = auth.uid());
 create policy "sets delete" on word_sets for delete
@@ -146,7 +169,7 @@ create policy "assignments read" on assignments for select
   using (assigned_by = auth.uid() or can_read_assignment(id));
 create policy "assignments write" on assignments for all
   using (assigned_by = auth.uid())
-  with check (assigned_by = auth.uid() and can_edit_word_set(word_set_id));
+  with check (assigned_by = auth.uid() and can_edit_word_set(word_set_id) and (group_id is null or owns_group(group_id)));
 
 drop policy if exists "assignment students read"  on assignment_students;
 drop policy if exists "assignment students write" on assignment_students;
@@ -164,7 +187,7 @@ drop policy if exists "progress update" on word_progress;
 create policy "progress read" on word_progress for select
   using (can_view_student(student_id));
 create policy "progress insert" on word_progress for insert
-  with check (student_id = auth.uid());
+  with check (student_id = auth.uid() and can_read_vocab_item(vocabulary_item_id));
 create policy "progress update" on word_progress for update
   using (student_id = auth.uid()) with check (student_id = auth.uid());
 
@@ -173,13 +196,14 @@ drop policy if exists "history insert" on review_history;
 create policy "history read" on review_history for select
   using (can_view_student(student_id));
 create policy "history insert" on review_history for insert
-  with check (student_id = auth.uid());
+  with check (student_id = auth.uid() and can_read_vocab_item(vocabulary_item_id));
 
 -- ---------- favorites ------------------------------------------------
 drop policy if exists "favorites own"  on favorites;
 drop policy if exists "favorites read" on favorites;
 create policy "favorites own" on favorites for all
-  using (student_id = auth.uid()) with check (student_id = auth.uid());
+  using (student_id = auth.uid())
+  with check (student_id = auth.uid() and can_read_vocab_item(vocabulary_item_id));
 create policy "favorites read" on favorites for select
   using (can_view_student(student_id));
 

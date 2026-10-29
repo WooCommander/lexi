@@ -8,6 +8,10 @@ import { LxNotificationContainer } from '@/design-system'
 import { useAuthStore } from '@/modules/auth/state/useAuthStore'
 import { useStudyStore } from '@/modules/training/state/useStudyStore'
 import { useWordSetsStore } from '@/modules/word-sets/state/useWordSetsStore'
+import { useGroupsStore } from '@/modules/groups/state/useGroupsStore'
+import { useStudentsStore } from '@/modules/students/state/useStudentsStore'
+import { useAssignmentsStore } from '@/modules/assignments/state/useAssignmentsStore'
+import { useTrainingSession } from '@/modules/training/state/useTrainingSession'
 import { useLanguagesStore } from '@/modules/languages/state/useLanguagesStore'
 import { useUpdateStore } from '@/modules/updates/state/useUpdateStore'
 import UpdateBanner from '@/modules/updates/ui/UpdateBanner.vue'
@@ -44,6 +48,10 @@ watch(
     if (prev && next !== prev) {
       study.reset()
       useWordSetsStore().reset()
+      useGroupsStore().reset()
+      useStudentsStore().reset()
+      useAssignmentsStore().reset()
+      useTrainingSession().reset()
     }
   },
 )

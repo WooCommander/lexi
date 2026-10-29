@@ -2,11 +2,11 @@ import type { TopicWords } from './topics'
 
 export const RO_WORDS: TopicWords = {
     greetings: `
-bună|привет, здравствуй|буна
-bună ziua|добрый день|буна зиуа
-bună dimineața|доброе утро|буна диминяца
-bună seara|добрый вечер|буна сяра
-noapte bună|спокойной ночи|ноапте буна
+bună|привет, здравствуй|бунэ
+bună ziua|добрый день|бунэ зиуа
+bună dimineața|доброе утро|бунэ диминяца
+bună seara|добрый вечер|бунэ сяра
+noapte bună|спокойной ночи|ноапте бунэ
 la revedere|до свидания|ла ревидере
 pa|пока|па
 mulțumesc|спасибо|мулцумеск

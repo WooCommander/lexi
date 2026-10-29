@@ -125,4 +125,4 @@ SUPABASE_SERVICE_ROLE_KEY=eyJ...
 `npm run android:icons` (перегенерировать иконки и сплэш из `public/icon.svg`).
 Первую установку делайте из `app-latest.apk`; установка из «неизвестных источников» должна быть разрешена.
 
-Архитектура и соглашения: [docs/architecture.md](docs/architecture.md).
+Архитектура и соглашения: [docs/architecture.md](docs/architecture.md). Результаты аудита и открытые задачи: [docs/audit-report.md](docs/audit-report.md).

@@ -51,7 +51,8 @@ router.beforeEach(async to => {
     const roles = to.meta.roles
     if (roles?.length) {
         const allowed = roles.filter(r => auth.hasRole(r))
-        if (!allowed.length) return home
+        // роли не загрузились (нет сети) или экран чужой: если «домой» — тот же адрес, уводим в профиль, а не по кругу
+        if (!allowed.length) return home === to.path ? '/settings' : home
         // открыли экран другой роли (например, по ссылке) — переключаем интерфейс
         if (!auth.activeRole || !allowed.includes(auth.activeRole)) auth.setActiveRole(allowed[0])
     }

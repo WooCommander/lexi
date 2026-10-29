@@ -115,6 +115,13 @@ describe('buildSession', () => {
         expect(plan.cards.map(c => c.item.id).sort()).toEqual(['b', 'c'])
     })
 
+    it('an explicit list never includes locked words and respects the size', () => {
+        const items = [study('a'), study('b', true), study('c'), study('d')]
+        const plan = buildSession({ items, progress: new Map(), size: 2, mode: 'mixed', itemIds: ['a', 'b', 'c', 'd'], now: NOW })
+        expect(plan.cards).toHaveLength(2)
+        expect(plan.cards.every(c => c.item.id !== 'b')).toBe(true)
+    })
+
     it('shows new words forward in mixed mode', () => {
         expect(pickDirection('mixed', undefined, () => 0.99)).toBe(Forward)
     })

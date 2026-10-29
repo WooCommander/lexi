@@ -23,18 +23,20 @@ export const answerText = (item: VocabularyItem, direction: TrainingDirection): 
 const answerLanguage = (item: VocabularyItem, direction: TrainingDirection): string =>
     direction === TrainingDirection.Forward ? item.targetLanguageId : item.sourceLanguageId
 
-/** Нижний регистр, без диакритики (ă → a), ё → е, без знаков препинания, пробелы схлопнуты. */
+/**
+ * Нижний регистр, без диакритики у латиницы (ă → a, ș → s), ё → е, без знаков препинания, пробелы схлопнуты.
+ * У кириллицы диакритику не снимаем: й ≠ и, ї ≠ і — в украинском это разные буквы и разные слова.
+ */
 export const fold = (text: string): string =>
     text
         .toLowerCase()
         .replace(/ё/g, 'е')
-        .normalize('NFD')
-        .replace(/[̀-ͯ]/g, '')
+        .replace(/\p{Script=Latin}/gu, ch => ch.normalize('NFD').replace(/\p{M}/gu, ''))
         .replace(/[^\p{L}\p{N}\s]/gu, '')
         .replace(/\s+/g, ' ')
         .trim()
 
-/** Без диакритики не складываем «ș»/«ț» с «s»/«t» молча: сравниваем только после fold, а точное — отдельно. */
+/** Точное совпадение (с диакритикой): отличает «exact» от «close», где диакритика пропущена. */
 const exactNormalize = (text: string): string =>
     text.toLowerCase().replace(/\s+/g, ' ').trim().replace(/[.!?]+$/u, '')
 

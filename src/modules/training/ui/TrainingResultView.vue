@@ -75,7 +75,7 @@ const home = () => {
         <RotateCcw :size="20" /> Повторить ошибки ({{ wordsLabel(mistakes.length) }})
       </LxButton>
       <LxButton size="lg" block @click="go(session.moreWords())">
-        <Plus :size="20" /> Ещё {{ session.config?.size ?? 10 }} слов
+        <Plus :size="20" /> Ещё {{ session.config?.baseSize ?? session.config?.size ?? 10 }} слов
       </LxButton>
       <LxButton variant="secondary" size="lg" block @click="home">
         <Home :size="20" /> На главную

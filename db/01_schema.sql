@@ -225,3 +225,10 @@ create index if not exists idx_progress_student_next    on word_progress(student
 create index if not exists idx_progress_item            on word_progress(vocabulary_item_id);
 create index if not exists idx_history_student_created  on review_history(student_id, created_at desc);
 create index if not exists idx_history_item             on review_history(vocabulary_item_id);
+create index if not exists idx_history_assignment       on review_history(assignment_id);
+create index if not exists idx_history_created          on review_history(created_at);
+create index if not exists idx_favorites_item           on favorites(vocabulary_item_id);
+
+-- Коды сравниваются без учёта регистра: «eng-test» и «ENG-TEST» — один и тот же код, у двух владельцев его быть не может
+-- (иначе подключение по коду достаётся случайному владельцу).
+create unique index if not exists invite_codes_code_upper_uq on invite_codes (upper(code));

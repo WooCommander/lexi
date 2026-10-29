@@ -1,4 +1,5 @@
 import { supabase } from '@/api/supabase'
+import { chunk, fetchAllRows } from '@/api/paginate'
 import { VocabularyService } from '@/modules/vocabulary/services/VocabularyService'
 import {
     vocabularyItemFromRow,
@@ -40,9 +41,13 @@ export class WordSetService {
 
     static async fetchByIds(ids: string[]): Promise<WordSet[]> {
         if (!ids.length) return []
-        const { data, error } = await supabase.from('word_sets').select(WORD_SET_SELECT).in('id', [...new Set(ids)])
-        if (error) throw error
-        return (data as WordSetRow[]).map(wordSetFromRow)
+        const result: WordSet[] = []
+        for (const part of chunk([...new Set(ids)], 100)) {
+            const { data, error } = await supabase.from('word_sets').select(WORD_SET_SELECT).in('id', part)
+            if (error) throw error
+            result.push(...(data as WordSetRow[]).map(wordSetFromRow))
+        }
+        return result
     }
 
     static async fetch(id: string): Promise<WordSet | null> {
@@ -87,13 +92,25 @@ export class WordSetService {
 
     static async fetchEntries(setIds: string[]): Promise<WordSetEntry[]> {
         if (!setIds.length) return []
-        const { data, error } = await supabase
-            .from('word_set_items')
-            .select('word_set_id, position, vocabulary_items(*)')
-            .in('word_set_id', [...new Set(setIds)])
-            .order('position')
-        if (error) throw error
-        return (data as unknown as WordSetItemRow[]).map(entryFromRow).filter((e): e is WordSetEntry => !!e)
+        const rows: WordSetItemRow[] = []
+        for (const part of chunk([...new Set(setIds)], 50)) {
+            rows.push(
+                ...((await fetchAllRows<unknown>((from, to) =>
+                    supabase
+                        .from('word_set_items')
+                        .select('word_set_id, position, vocabulary_items(*)')
+                        .in('word_set_id', part)
+                        // составной первичный ключ: порядок однозначный, страницы не пересекаются
+                        .order('word_set_id')
+                        .order('vocabulary_item_id')
+                        .range(from, to),
+                )) as WordSetItemRow[]),
+            )
+        }
+        return rows
+            .map(entryFromRow)
+            .filter((e): e is WordSetEntry => !!e)
+            .sort((a, b) => a.position - b.position)
     }
 
     /** Создаёт слова в паре набора и добавляет их в конец набора. */

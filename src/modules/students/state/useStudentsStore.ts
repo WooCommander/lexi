@@ -38,5 +38,10 @@ export const useStudentsStore = defineStore('students', () => {
         students.value = students.value.filter(s => s.id !== studentId)
     }
 
-    return { students, isLoading, kind, byId, nameOf, load, unlink }
+    const reset = () => {
+        students.value = []
+        loadedKey.value = null
+    }
+
+    return { students, isLoading, kind, byId, nameOf, load, unlink, reset }
 })

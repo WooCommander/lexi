@@ -146,6 +146,29 @@ describe('useTrainingSession', () => {
         expect(session.knownCount + session.unknownCount).toBe(0) // итоги новой тренировки обнулены
     })
 
+    it('«Ещё N слов» после повтора ошибок возвращается к выбранному размеру', () => {
+        studyItems = ['a', 'b', 'c', 'd', 'e'].map(study)
+        const { session } = begin({ size: 5 })
+        // отвечаем на всё, одно слово — с ошибкой (после ошибки оно вернётся в очередь ещё дважды)
+        let guard = 0
+        while (session.status === 'active' && guard++ < 30) respond(session, session.queue[session.index].item.id === 'a' ? Wrong : Correct)
+        expect(session.repeatMistakes()).toBe(1)
+        expect(session.config?.size).toBe(1)
+        expect(session.config?.baseSize).toBe(5)
+        session.moreWords()
+        expect(session.config?.size).toBe(5)
+    })
+
+    it('reset очищает тренировку прежнего пользователя', () => {
+        const { session } = begin()
+        respond(session, Correct)
+        session.reset()
+        expect(session.status).toBe('idle')
+        expect(session.queue).toEqual([])
+        expect(session.config).toBeNull()
+        expect(session.knownCount).toBe(0)
+    })
+
     it('finishEarly with no answers goes back to idle, with answers shows results', () => {
         const first = begin()
         first.session.finishEarly()

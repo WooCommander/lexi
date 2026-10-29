@@ -11,6 +11,7 @@ import {
     type WordProgressRow,
 } from '../domain/Training'
 import { startOfDay } from '@/shared/lib/dates'
+import { chunk, fetchAllRows } from '@/api/paginate'
 
 export interface AnswerRecord {
     progress: WordProgress
@@ -23,23 +24,30 @@ export interface AnswerRecord {
 export class ProgressService {
     static async fetchForStudents(studentIds: string[]): Promise<WordProgress[]> {
         if (!studentIds.length) return []
-        const { data, error } = await supabase.from('word_progress').select('*').in('student_id', studentIds)
-        if (error) throw error
-        return (data as WordProgressRow[]).map(wordProgressFromRow)
+        const rows: WordProgressRow[] = []
+        for (const ids of chunk([...new Set(studentIds)], 100)) {
+            rows.push(
+                ...(await fetchAllRows<WordProgressRow>((from, to) =>
+                    supabase.from('word_progress').select('*').in('student_id', ids).order('id').range(from, to),
+                )),
+            )
+        }
+        return rows.map(wordProgressFromRow)
     }
 
     static async fetchHistory(studentIds: string[], since?: Date): Promise<ReviewHistoryItem[]> {
         if (!studentIds.length) return []
-        let query = supabase
-            .from('review_history')
-            .select('*')
-            .in('student_id', studentIds)
-            .order('created_at', { ascending: false })
-            .limit(5000)
-        if (since) query = query.gte('created_at', since.toISOString())
-        const { data, error } = await query
-        if (error) throw error
-        return (data as ReviewHistoryRow[]).map(reviewFromRow)
+        const rows: ReviewHistoryRow[] = []
+        for (const ids of chunk([...new Set(studentIds)], 100)) {
+            rows.push(
+                ...(await fetchAllRows<ReviewHistoryRow>((from, to) => {
+                    let query = supabase.from('review_history').select('*').in('student_id', ids)
+                    if (since) query = query.gte('created_at', since.toISOString())
+                    return query.order('created_at', { ascending: false }).order('id').range(from, to)
+                })),
+            )
+        }
+        return rows.map(reviewFromRow)
     }
 
     /** Сколько разных слов ученик повторил сегодня — для дневной цели. */

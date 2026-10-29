@@ -13,6 +13,8 @@ export interface SessionConfig {
     exercise?: ExerciseType
     /** Явный список слов: повтор ошибок / сложные / избранное. */
     itemIds?: string[]
+    /** Размер, выбранный пользователем: «Ещё N слов» после повтора ошибок возвращается к нему. */
+    baseSize?: number
 }
 
 /** Сколько раз неверную карточку возвращаем в текущую тренировку. */
@@ -63,7 +65,7 @@ export const useTrainingSession = defineStore('trainingSession', () => {
             // новые слова — в пределах дневной цели, но хотя бы половина тренировки
             maxNew: Math.max(goalLeft, Math.ceil(next.size / 2)),
         })
-        config.value = next
+        config.value = { ...next, baseSize: next.baseSize ?? next.size }
         queue.value = plan.cards
         index.value = 0
         revealed.value = false
@@ -109,14 +111,27 @@ export const useTrainingSession = defineStore('trainingSession', () => {
 
     const moreWords = () => {
         if (!config.value) return 0
-        return start({ ...config.value, itemIds: undefined })
+        return start({ ...config.value, itemIds: undefined, size: config.value.baseSize ?? config.value.size })
     }
 
     const finishEarly = () => {
         status.value = firstResults.value.size ? 'finished' : 'idle'
     }
 
+    /** Смена аккаунта: очередь карточек прежнего пользователя не должна пережить выход. */
+    const reset = () => {
+        config.value = null
+        queue.value = []
+        index.value = 0
+        revealed.value = false
+        firstResults.value = new Map()
+        doneItemIds.value = new Set()
+        requeues.value = new Map()
+        status.value = 'idle'
+    }
+
     return {
+        reset,
         config,
         exercise,
         queue,

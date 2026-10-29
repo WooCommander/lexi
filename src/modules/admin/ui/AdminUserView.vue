@@ -86,6 +86,13 @@ const remove = async () => {
   }
 }
 
+const deleteMessage = computed(() =>
+  user.value?.roles.includes(UserRole.Teacher) || user.value?.roles.includes(UserRole.Parent)
+    ? 'Аккаунт, наборы, созданные им слова, его прогресс и история будут удалены без возможности восстановления. ' +
+      'Вместе со словами пропадёт и прогресс его учеников по этим словам.'
+    : 'Аккаунт, наборы, слова, прогресс и история будут удалены без возможности восстановления.',
+)
+
 const hasProgress = computed(() => !!stats.value?.progress.length)
 </script>
 
@@ -132,7 +139,7 @@ const hasProgress = computed(() => !!stats.value?.progress.length)
     </template>
 
     <LxConfirmationModal v-model:visible="isDeleteOpen" :title="`Удалить ${user?.name || 'пользователя'}?`"
-      message="Аккаунт, наборы, слова, прогресс и история будут удалены без возможности восстановления."
+      :message="deleteMessage"
       confirm-text="Удалить" variant="danger" @confirm="remove" />
   </div>
 </template>

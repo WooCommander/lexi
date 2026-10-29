@@ -14,8 +14,8 @@ insert into test.ids (name) values
   ('SETP'), ('AP');
 
 -- Регистрация идёт через триггер handle_new_user: профили, роли и настройки создаются сами.
-insert into auth.users (id, email, raw_user_meta_data)
-select test.id(u.name), lower(u.name) || '@test.local', u.meta::jsonb
+insert into auth.users (id, email, raw_user_meta_data, email_confirmed_at)
+select test.id(u.name), lower(u.name) || '@test.local', u.meta::jsonb, now()
 from (values
   ('T1', '{"name": "Учитель 1", "roles": ["teacher"]}'),
   ('T2', '{"name": "Учитель 2", "roles": ["teacher"]}'),

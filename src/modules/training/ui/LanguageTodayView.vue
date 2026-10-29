@@ -35,6 +35,9 @@ const favoriteIds = computed(() =>
   study.itemsForLanguage(languageId.value).filter(s => study.favorites.has(s.item.id)).map(s => s.item.id),
 )
 
+/** Тренировка по избранному / списку — не больше стольких карточек за раз. */
+const MAX_LIST_SESSION = 30
+
 const size = ref<number>(10)
 const mode = ref<TrainingMode>('mixed')
 const exercise = ref<ExerciseType>('cards')
@@ -70,7 +73,7 @@ const start = (itemIds?: string[]) => {
   LxHaptics.medium()
   const count = session.start({
     languageId: languageId.value,
-    size: itemIds?.length ?? size.value,
+    size: itemIds ? Math.min(itemIds.length, MAX_LIST_SESSION) : size.value,
     mode: mode.value,
     exercise: exercise.value,
     itemIds,

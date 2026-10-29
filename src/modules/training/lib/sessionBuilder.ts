@@ -65,8 +65,9 @@ export const buildSession = (input: BuildSessionInput): SessionPlan => {
 
     if (input.itemIds?.length) {
         const wanted = new Set(input.itemIds)
-        const picked = items.filter(s => wanted.has(s.item.id))
-        const cards = shuffle(picked, random).map(s => {
+        // закрытые (ещё не «открытые» по графику задания) слова не берём даже из избранного; размер — не больше size
+        const picked = items.filter(s => wanted.has(s.item.id) && !s.locked)
+        const cards = shuffle(picked, random).slice(0, Math.max(1, size)).map(s => {
             const p = progress.get(s.item.id)
             return makeCard(s, pickDirection(mode, p, random), !SpacedRepetitionService.isDue(p, now))
         })
